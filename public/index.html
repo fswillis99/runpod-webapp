@@ -254,7 +254,7 @@
 <body>
   <div class="titlebar">
     <h1>RunPod Image Generator</h1>
-    <div class="credits">Credits: <span id="creditsDisplay">…</span></div>
+    <div class="credits" id="creditsDisplay">Credits: …</div>
   </div>
 
   <div class="workspace">
@@ -466,13 +466,17 @@
     }
 
     async function refreshCredits() {
+      const el = document.getElementById('creditsDisplay');
       try {
         const res = await fetch('/api/credits');
         const data = await res.json();
-        const el = document.getElementById('creditsDisplay');
-        el.textContent = data.credits !== null ? `$${data.credits}` : '—';
+        if (data.credits != null) {
+          el.innerHTML = `Credits: <span style="color:#4ade80;font-weight:600">$${data.credits}</span>`;
+        } else {
+          el.textContent = 'Credits: —';
+        }
       } catch {
-        document.getElementById('creditsDisplay').textContent = '—';
+        el.textContent = 'Credits: —';
       }
     }
 
