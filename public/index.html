@@ -470,12 +470,14 @@
       try {
         const res = await fetch('/api/credits');
         const data = await res.json();
+        console.log('Credits response:', data);
         if (data.credits != null) {
           el.innerHTML = `Credits: <span style="color:#4ade80;font-weight:600">$${data.credits}</span>`;
         } else {
           el.textContent = 'Credits: —';
         }
-      } catch {
+      } catch (err) {
+        console.error('Credits fetch failed:', err);
         el.textContent = 'Credits: —';
       }
     }
