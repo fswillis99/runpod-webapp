@@ -189,11 +189,11 @@
       <div class="row">
         <div>
           <label for="steps">Steps</label>
-          <input type="number" id="steps" value="3" min="1" max="150" />
+          <input type="number" id="steps" value="20" min="1" max="150" />
         </div>
         <div>
-          <label for="cfg">CFG Scale</label>
-          <input type="number" id="cfg" value="1.5" min="1" max="20" step="0.5" />
+          <label for="guidance">Guidance</label>
+          <input type="number" id="guidance" value="3.5" min="1" max="20" step="0.5" />
         </div>
       </div>
 
@@ -243,7 +243,7 @@
             width: parseInt(document.getElementById('width').value),
             height: parseInt(document.getElementById('height').value),
             steps: parseInt(document.getElementById('steps').value),
-            cfg: parseFloat(document.getElementById('cfg').value),
+            guidance: parseFloat(document.getElementById('guidance').value),
           }),
         });
         const data = await res.json();
@@ -278,6 +278,9 @@
             document.getElementById('placeholder').style.display = 'none';
             setStatus('Done!', 'success');
             setLoading(false);
+          } else if (status === 'FAILED') {
+            const detail = data.error || JSON.stringify(data.output) || 'no details returned';
+            throw new Error(`Job failed: ${detail}`);
           } else {
             throw new Error(`Unexpected status: ${status}`);
           }
