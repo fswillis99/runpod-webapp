@@ -74,11 +74,21 @@ function buildWorkflow({ prompt, negative_prompt, width, height, steps, guidance
   };
 }
 
+function buildFilenamePrefix() {
+  const workflowName = MODEL_NAME.replace(/\.[^.]+$/, ''); // strip extension
+  const now = new Date();
+  const pad = (n, w = 2) => String(n).padStart(w, '0');
+  const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+    + `-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  return `${workflowName}-${timestamp}`;
+}
+
 // Submit a generation job
 app.post('/api/generate', async (req, res) => {
   const { prompt, negative_prompt, width, height, steps, guidance, seed } = req.body;
 
   const workflow = buildWorkflow({ prompt, negative_prompt, width, height, steps, guidance, seed });
+  workflow["8"].inputs.filename_prefix = buildFilenamePrefix();
 
   try {
     const response = await fetch(`${BASE_URL}/run`, {
