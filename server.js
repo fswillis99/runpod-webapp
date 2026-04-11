@@ -32,9 +32,11 @@ app.get('/api/credits', async (req, res) => {
       }
     );
     const data = await response.json();
+    console.log('RunPod credits raw response:', JSON.stringify(data));
     const cents = data.data?.myself?.creditBalance ?? null;
     res.json({ credits: cents === null ? null : (cents / 100).toFixed(2) });
   } catch (err) {
+    console.error('Credits API error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
