@@ -18,12 +18,28 @@
       padding: 2rem 1rem 4rem;
     }
 
+    .titlebar {
+      display: flex;
+      align-items: baseline;
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
     h1 {
       font-size: 1.6rem;
       font-weight: 600;
-      margin-bottom: 2rem;
       color: #fff;
       letter-spacing: -0.02em;
+    }
+
+    .credits {
+      font-size: 0.8rem;
+      color: #555;
+    }
+
+    .credits span {
+      color: #4ade80;
+      font-weight: 600;
     }
 
     /* ── Main workspace ── */
@@ -236,7 +252,10 @@
   </style>
 </head>
 <body>
-  <h1>RunPod Image Generator</h1>
+  <div class="titlebar">
+    <h1>RunPod Image Generator</h1>
+    <div class="credits">Credits: <span id="creditsDisplay">…</span></div>
+  </div>
 
   <div class="workspace">
     <!-- Left: form -->
@@ -431,6 +450,7 @@
               filename: imageEntry.filename,
               image: imageEntry.data,
             });
+            refreshCredits();
           } else if (status === 'FAILED') {
             throw new Error(`Job failed: ${data.error || JSON.stringify(data.output) || 'no details'}`);
           } else {
@@ -445,8 +465,20 @@
       setTimeout(poll, POLL_INTERVAL_MS);
     }
 
-    // Load history on page init
+    async function refreshCredits() {
+      try {
+        const res = await fetch('/api/credits');
+        const data = await res.json();
+        const el = document.getElementById('creditsDisplay');
+        el.textContent = data.credits !== null ? `$${data.credits}` : '—';
+      } catch {
+        document.getElementById('creditsDisplay').textContent = '—';
+      }
+    }
+
+    // Load history and credits on page init
     refreshHistory();
+    refreshCredits();
   </script>
 </body>
 </html>
