@@ -28,12 +28,12 @@ app.get('/api/credits', async (req, res) => {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: '{ myself { creditBalance } }' }),
+        body: JSON.stringify({ query: '{ myself { clientBalance } }' }),
       }
     );
     const data = await response.json();
     console.log('RunPod credits raw response:', JSON.stringify(data));
-    const cents = data.data?.myself?.creditBalance ?? null;
+    const cents = data.data?.myself?.clientBalance ?? null;
     res.json({ credits: cents === null ? null : (cents / 100).toFixed(2) });
   } catch (err) {
     console.error('Credits API error:', err.message);
