@@ -60,18 +60,26 @@ app.get('/api/history', (req, res) => {
 });
 
 app.post('/api/history', (req, res) => {
-  const { prompt, negative_prompt, filename, image, timestamp } = req.body;
+  const { prompt, negative_prompt, workflow_type, filename, image, timestamp } = req.body;
   const history = loadHistory();
-  history.unshift({ id: Date.now(), timestamp, prompt, negative_prompt, filename, image });
+  history.unshift({ id: Date.now(), timestamp, prompt, negative_prompt, workflow_type, filename, image });
   if (history.length > MAX_HISTORY) history.splice(MAX_HISTORY);
   saveHistory(history);
   res.json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------
-// Workflow builder
+// Workflow builders
 // ---------------------------------------------------------------------------
-function buildWorkflow({ prompt, negative_prompt, width, height, steps, guidance, seed }) {
+function buildFilenamePrefix(workflowName) {
+  const now = new Date();
+  const pad = (n, w = 2) => String(n).padStart(w, '0');
+  const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+    + `-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  return `${workflowName}-${timestamp}`;
+}
+
+function buildWorkflowFlux({ prompt, negative_prompt, width, height, steps, guidance, seed }) {
   return {
     "1": {
       inputs: { ckpt_name: MODEL_NAME },
@@ -119,27 +127,217 @@ function buildWorkflow({ prompt, negative_prompt, width, height, steps, guidance
   };
 }
 
-function buildFilenamePrefix() {
-  const workflowName = MODEL_NAME.replace(/\.[^.]+$/, '');
-  const now = new Date();
-  const pad = (n, w = 2) => String(n).padStart(w, '0');
-  const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
-    + `-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-  return `${workflowName}-${timestamp}`;
+// Qwen-Image 2512 — text-to-image (turbo mode, 6 steps)
+function buildWorkflowQwen2512({ prompt, negative_prompt, width, height, seed }) {
+  const w = width ?? 1328;
+  const h = height ?? 1328;
+  return {
+    "219": {
+      class_type: "CLIPLoader",
+      inputs: { clip_name: "qwen_2.5_vl_7b_fp8_scaled.safetensors", type: "qwen_image" },
+    },
+    "220": {
+      class_type: "VAELoader",
+      inputs: { vae_name: "qwen_image_vae.safetensors" },
+    },
+    "226": {
+      class_type: "UNETLoader",
+      inputs: { unet_name: "qwen_image_2512_fp8_e4m3fn.safetensors", weight_dtype: "default" },
+    },
+    "221": {
+      class_type: "LoraLoaderModelOnly",
+      inputs: { model: ["226", 0], lora_name: "Qwen-Image-2512-Lightning-4steps-V1.0-fp32.safetensors", strength_model: 1 },
+    },
+    "245": {
+      class_type: "LoraLoaderModelOnly",
+      inputs: { model: ["221", 0], lora_name: "Qwen4Play-2512.1_e10.safetensors", strength_model: 1 },
+    },
+    "248": {
+      class_type: "LoraLoaderModelOnly",
+      inputs: { model: ["245", 0], lora_name: "qwen-image_nsfw_adv_v1.0.safetensors", strength_model: 0.6 },
+    },
+    "249": {
+      class_type: "LoraLoaderModelOnly",
+      inputs: { model: ["248", 0], lora_name: "spanking_Qwen-dim64-v1.safetensors", strength_model: 1 },
+    },
+    "250": {
+      class_type: "LoraLoaderModelOnly",
+      inputs: { model: ["249", 0], lora_name: "Korean_qwen.safetensors", strength_model: 0.6 },
+    },
+    "222": {
+      class_type: "ModelSamplingAuraFlow",
+      inputs: { model: ["250", 0], shift: 3.1 },
+    },
+    "227": {
+      class_type: "CLIPTextEncode",
+      inputs: { text: prompt || "", clip: ["219", 0] },
+    },
+    "228": {
+      class_type: "CLIPTextEncode",
+      inputs: { text: negative_prompt || "低分辨率，低画质，肢体畸形，手指畸形", clip: ["219", 0] },
+    },
+    "232": {
+      class_type: "EmptySD3LatentImage",
+      inputs: { width: w, height: h, batch_size: 1 },
+    },
+    "230": {
+      class_type: "KSampler",
+      inputs: {
+        model: ["222", 0],
+        positive: ["227", 0],
+        negative: ["228", 0],
+        latent_image: ["232", 0],
+        seed: seed ?? Math.floor(Math.random() * 2**32),
+        steps: 6,
+        cfg: 1,
+        sampler_name: "res_multistep",
+        scheduler: "simple",
+        denoise: 1,
+      },
+    },
+    "231": {
+      class_type: "VAEDecode",
+      inputs: { samples: ["230", 0], vae: ["220", 0] },
+    },
+    "60": {
+      class_type: "SaveImage",
+      inputs: { images: ["231", 0], filename_prefix: "ComfyUI" },
+    },
+  };
+}
+
+// Qwen-Image 2511 — image edit (turbo mode, 6 steps)
+function buildWorkflowQwen2511({ prompt, image_filename, seed }) {
+  const fname = image_filename || "input.png";
+  return {
+    "83": {
+      class_type: "LoadImage",
+      inputs: { image: fname, upload: "image" },
+    },
+    "162": {
+      class_type: "CLIPLoader",
+      inputs: { clip_name: "qwen_2.5_vl_7b_fp8_scaled.safetensors", type: "qwen_image" },
+    },
+    "146": {
+      class_type: "VAELoader",
+      inputs: { vae_name: "qwen_image_vae.safetensors" },
+    },
+    "161": {
+      class_type: "UNETLoader",
+      inputs: { unet_name: "qwen_image_edit_2511_bf16.safetensors", weight_dtype: "default" },
+    },
+    "160": {
+      class_type: "FluxKontextImageScale",
+      inputs: { image: ["83", 0] },
+    },
+    // Negative conditioning (empty prompt, image1 = scaled, image2 = original)
+    "149": {
+      class_type: "TextEncodeQwenImageEditPlus",
+      inputs: { prompt: "", clip: ["162", 0], vae: ["146", 0], image1: ["160", 0], image2: ["83", 0] },
+    },
+    // Positive conditioning (edit instruction, image1 = scaled, image2 = original)
+    "151": {
+      class_type: "TextEncodeQwenImageEditPlus",
+      inputs: { prompt: prompt || "", clip: ["162", 0], vae: ["146", 0], image1: ["160", 0], image2: ["83", 0] },
+    },
+    "147": {
+      class_type: "FluxKontextMultiReferenceLatentMethod",
+      inputs: { conditioning: ["149", 0], reference_latents_method: "index_timestep_zero" },
+    },
+    "148": {
+      class_type: "FluxKontextMultiReferenceLatentMethod",
+      inputs: { conditioning: ["151", 0], reference_latents_method: "index_timestep_zero" },
+    },
+    "145": {
+      class_type: "ModelSamplingAuraFlow",
+      inputs: { model: ["161", 0], shift: 3.1 },
+    },
+    "152": {
+      class_type: "CFGNorm",
+      inputs: { model: ["145", 0], strength: 1 },
+    },
+    "153": {
+      class_type: "LoraLoaderModelOnly",
+      inputs: { model: ["152", 0], lora_name: "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors", strength_model: 1 },
+    },
+    "171": {
+      class_type: "LoraLoaderModelOnly",
+      inputs: { model: ["153", 0], lora_name: "Qwen4Play-2512.1_e10.safetensors", strength_model: 1 },
+    },
+    "172": {
+      class_type: "LoraLoaderModelOnly",
+      inputs: { model: ["171", 0], lora_name: "qwen-image_nsfw_adv_v1.0.safetensors", strength_model: 1 },
+    },
+    "173": {
+      class_type: "LoraLoaderModelOnly",
+      inputs: { model: ["172", 0], lora_name: "spanking_Qwen-dim64-v1.safetensors", strength_model: 1 },
+    },
+    "174": {
+      class_type: "LoraLoaderModelOnly",
+      inputs: { model: ["173", 0], lora_name: "Korean_qwen.safetensors", strength_model: 0.6 },
+    },
+    "156": {
+      class_type: "VAEEncode",
+      inputs: { pixels: ["160", 0], vae: ["146", 0] },
+    },
+    "169": {
+      class_type: "KSampler",
+      inputs: {
+        model: ["174", 0],
+        positive: ["148", 0],
+        negative: ["147", 0],
+        latent_image: ["156", 0],
+        seed: seed ?? Math.floor(Math.random() * 2**32),
+        steps: 6,
+        cfg: 1,
+        sampler_name: "euler",
+        scheduler: "simple",
+        denoise: 1,
+      },
+    },
+    "158": {
+      class_type: "VAEDecode",
+      inputs: { samples: ["169", 0], vae: ["146", 0] },
+    },
+    "9": {
+      class_type: "SaveImage",
+      inputs: { images: ["158", 0], filename_prefix: "ComfyUI" },
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
 // RunPod proxy
 // ---------------------------------------------------------------------------
 app.post('/api/generate', async (req, res) => {
-  const { prompt, negative_prompt, width, height, steps, guidance, seed } = req.body;
-  const workflow = buildWorkflow({ prompt, negative_prompt, width, height, steps, guidance, seed });
-  workflow["8"].inputs.filename_prefix = buildFilenamePrefix();
+  const { workflowType = 'flux', prompt, negative_prompt, width, height, steps, guidance, seed, image } = req.body;
+
+  let workflow, input;
+
+  if (workflowType === 'qwen2512') {
+    workflow = buildWorkflowQwen2512({ prompt, negative_prompt, width, height, seed });
+    workflow["60"].inputs.filename_prefix = buildFilenamePrefix('qwen2512');
+    input = { workflow };
+  } else if (workflowType === 'qwen2511') {
+    const image_filename = 'input.png';
+    workflow = buildWorkflowQwen2511({ prompt, image_filename, seed });
+    workflow["9"].inputs.filename_prefix = buildFilenamePrefix('qwen2511');
+    input = {
+      workflow,
+      images: image ? [{ name: image_filename, image }] : [],
+    };
+  } else {
+    // flux (default)
+    workflow = buildWorkflowFlux({ prompt, negative_prompt, width, height, steps, guidance, seed });
+    workflow["8"].inputs.filename_prefix = buildFilenamePrefix(MODEL_NAME.replace(/\.[^.]+$/, ''));
+    input = { workflow };
+  }
+
   try {
     const response = await fetch(`${BASE_URL}/run`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ input: { workflow } }),
+      body: JSON.stringify({ input }),
     });
     res.json(await response.json());
   } catch (err) {
