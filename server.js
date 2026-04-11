@@ -19,6 +19,27 @@ const headers = {
 };
 
 // ---------------------------------------------------------------------------
+// Credits
+// ---------------------------------------------------------------------------
+app.get('/api/credits', async (req, res) => {
+  try {
+    const response = await fetch(
+      `https://api.runpod.io/graphql?api_key=${API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: '{ myself { creditBalance } }' }),
+      }
+    );
+    const data = await response.json();
+    const cents = data.data?.myself?.creditBalance ?? null;
+    res.json({ credits: cents === null ? null : (cents / 100).toFixed(2) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // History (persisted to history.json, newest first, max 20 entries)
 // ---------------------------------------------------------------------------
 const HISTORY_FILE = path.join(__dirname, 'history.json');
