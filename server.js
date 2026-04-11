@@ -8,7 +8,7 @@ app.use(express.static('public'));
 
 const API_KEY = process.env.RUNPOD_API_KEY;
 const ENDPOINT_ID = process.env.RUNPOD_ENDPOINT_ID;
-const MODEL_NAME = process.env.MODEL_NAME || 'sd_xl_turbo_1.0_fp16.safetensors';
+const MODEL_NAME = process.env.MODEL_NAME || 'flux1-dev-fp8.safetensors';
 const BASE_URL = `https://api.runpod.ai/v2/${ENDPOINT_ID}`;
 
 const headers = {
@@ -16,50 +16,59 @@ const headers = {
   'Authorization': `Bearer ${API_KEY}`,
 };
 
-// Build a ComfyUI SDXL Turbo workflow with injected parameters.
+// Build a ComfyUI Flux Dev workflow with injected parameters.
 // Node layout:
-//   "3" KSampler  "4" CheckpointLoaderSimple  "5" EmptyLatentImage
-//   "6" CLIPTextEncode (positive)  "7" CLIPTextEncode (negative)
-//   "8" VAEDecode  "9" SaveImage
-function buildWorkflow({ prompt, negative_prompt, width, height, steps, cfg, seed }) {
+//   "1"  CheckpointLoaderSimple
+//   "2"  CLIPTextEncode (positive prompt)
+//   "3"  CLIPTextEncode (negative prompt, empty for Flux)
+//   "4"  FluxGuidance
+//   "5"  EmptySD3LatentImage
+//   "6"  KSampler
+//   "7"  VAEDecode
+//   "8"  SaveImage
+function buildWorkflow({ prompt, negative_prompt, width, height, steps, guidance, seed }) {
   return {
+    "1": {
+      inputs: { ckpt_name: MODEL_NAME },
+      class_type: "CheckpointLoaderSimple",
+    },
+    "2": {
+      inputs: { text: prompt || "", clip: ["1", 1] },
+      class_type: "CLIPTextEncode",
+    },
     "3": {
+      inputs: { text: negative_prompt || "", clip: ["1", 1] },
+      class_type: "CLIPTextEncode",
+    },
+    "4": {
+      inputs: { guidance: guidance ?? 3.5, conditioning: ["2", 0] },
+      class_type: "FluxGuidance",
+    },
+    "5": {
+      inputs: { width: width ?? 1024, height: height ?? 1024, batch_size: 1 },
+      class_type: "EmptySD3LatentImage",
+    },
+    "6": {
       inputs: {
         seed: seed ?? Math.floor(Math.random() * 2**32),
-        steps: steps ?? 3,
-        cfg: cfg ?? 1.5,
-        sampler_name: "euler_ancestral",
-        scheduler: "normal",
+        steps: steps ?? 20,
+        cfg: 1,
+        sampler_name: "euler",
+        scheduler: "simple",
         denoise: 1,
-        model: ["4", 0],
-        positive: ["6", 0],
-        negative: ["7", 0],
+        model: ["1", 0],
+        positive: ["4", 0],
+        negative: ["3", 0],
         latent_image: ["5", 0],
       },
       class_type: "KSampler",
     },
-    "4": {
-      inputs: { ckpt_name: MODEL_NAME },
-      class_type: "CheckpointLoaderSimple",
-    },
-    "5": {
-      inputs: { width: width ?? 1024, height: height ?? 1024, batch_size: 1 },
-      class_type: "EmptyLatentImage",
-    },
-    "6": {
-      inputs: { text: prompt || "", clip: ["4", 1] },
-      class_type: "CLIPTextEncode",
-    },
     "7": {
-      inputs: { text: negative_prompt || "text, watermark, blurry, ugly, deformed", clip: ["4", 1] },
-      class_type: "CLIPTextEncode",
-    },
-    "8": {
-      inputs: { samples: ["3", 0], vae: ["4", 2] },
+      inputs: { samples: ["6", 0], vae: ["1", 2] },
       class_type: "VAEDecode",
     },
-    "9": {
-      inputs: { filename_prefix: "ComfyUI", images: ["8", 0] },
+    "8": {
+      inputs: { filename_prefix: "ComfyUI", images: ["7", 0] },
       class_type: "SaveImage",
     },
   };
@@ -67,9 +76,9 @@ function buildWorkflow({ prompt, negative_prompt, width, height, steps, cfg, see
 
 // Submit a generation job
 app.post('/api/generate', async (req, res) => {
-  const { prompt, negative_prompt, width, height, steps, cfg, seed } = req.body;
+  const { prompt, negative_prompt, width, height, steps, guidance, seed } = req.body;
 
-  const workflow = buildWorkflow({ prompt, negative_prompt, width, height, steps, cfg, seed });
+  const workflow = buildWorkflow({ prompt, negative_prompt, width, height, steps, guidance, seed });
 
   try {
     const response = await fetch(`${BASE_URL}/run`, {
