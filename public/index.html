@@ -94,6 +94,24 @@
     button:hover:not(:disabled) { background: #4f52d3; }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
 
+    /* ── Download button ── */
+    .btn-download {
+      display: none;
+      width: 100%;
+      padding: 0.6rem;
+      border: 1px solid #444;
+      border-radius: 8px;
+      background: transparent;
+      color: #aaa;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: center;
+      text-decoration: none;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .btn-download:hover { border-color: #6366f1; color: #fff; }
+
     /* ── Right panel: image ── */
     .panel-image {
       flex: 1;
@@ -198,6 +216,7 @@
       </div>
 
       <button id="generateBtn" onclick="generate()">Generate</button>
+      <a id="downloadBtn" class="btn-download">Download</a>
       <div class="status-bar" id="status">Ready</div>
     </div>
 
@@ -231,6 +250,7 @@
       setStatus('Submitting job…');
       document.getElementById('resultImg').style.display = 'none';
       document.getElementById('placeholder').style.display = 'flex';
+      document.getElementById('downloadBtn').style.display = 'none';
 
       let jobId;
       try {
@@ -272,10 +292,15 @@
             // ComfyUI worker returns: { images: [{ filename, type, data }] }
             const imageEntry = data.output?.images?.[0];
             if (!imageEntry?.data) throw new Error('No image in response');
+            const dataUrl = 'data:image/png;base64,' + imageEntry.data;
             const img = document.getElementById('resultImg');
-            img.src = 'data:image/png;base64,' + imageEntry.data;
+            img.src = dataUrl;
             img.style.display = 'block';
             document.getElementById('placeholder').style.display = 'none';
+            const dl = document.getElementById('downloadBtn');
+            dl.href = dataUrl;
+            dl.download = imageEntry.filename;
+            dl.style.display = 'block';
             setStatus('Done!', 'success');
             setLoading(false);
           } else if (status === 'FAILED') {
