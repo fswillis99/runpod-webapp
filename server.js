@@ -1,9 +1,11 @@
 require('dotenv').config();
 const express = require('express');
 const fetch = require('node-fetch');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '15mb' })); // images arrive as base64
 app.use(express.static('public'));
 
 const API_KEY = process.env.RUNPOD_API_KEY;
@@ -16,16 +18,37 @@ const headers = {
   'Authorization': `Bearer ${API_KEY}`,
 };
 
-// Build a ComfyUI Flux Dev workflow with injected parameters.
-// Node layout:
-//   "1"  CheckpointLoaderSimple
-//   "2"  CLIPTextEncode (positive prompt)
-//   "3"  CLIPTextEncode (negative prompt, empty for Flux)
-//   "4"  FluxGuidance
-//   "5"  EmptySD3LatentImage
-//   "6"  KSampler
-//   "7"  VAEDecode
-//   "8"  SaveImage
+// ---------------------------------------------------------------------------
+// History (persisted to history.json, newest first, max 20 entries)
+// ---------------------------------------------------------------------------
+const HISTORY_FILE = path.join(__dirname, 'history.json');
+const MAX_HISTORY = 20;
+
+function loadHistory() {
+  try { return JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8')); }
+  catch { return []; }
+}
+
+function saveHistory(history) {
+  fs.writeFileSync(HISTORY_FILE, JSON.stringify(history));
+}
+
+app.get('/api/history', (req, res) => {
+  res.json(loadHistory());
+});
+
+app.post('/api/history', (req, res) => {
+  const { prompt, negative_prompt, filename, image, timestamp } = req.body;
+  const history = loadHistory();
+  history.unshift({ id: Date.now(), timestamp, prompt, negative_prompt, filename, image });
+  if (history.length > MAX_HISTORY) history.splice(MAX_HISTORY);
+  saveHistory(history);
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Workflow builder
+// ---------------------------------------------------------------------------
 function buildWorkflow({ prompt, negative_prompt, width, height, steps, guidance, seed }) {
   return {
     "1": {
@@ -75,7 +98,7 @@ function buildWorkflow({ prompt, negative_prompt, width, height, steps, guidance
 }
 
 function buildFilenamePrefix() {
-  const workflowName = MODEL_NAME.replace(/\.[^.]+$/, ''); // strip extension
+  const workflowName = MODEL_NAME.replace(/\.[^.]+$/, '');
   const now = new Date();
   const pad = (n, w = 2) => String(n).padStart(w, '0');
   const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
@@ -83,33 +106,29 @@ function buildFilenamePrefix() {
   return `${workflowName}-${timestamp}`;
 }
 
-// Submit a generation job
+// ---------------------------------------------------------------------------
+// RunPod proxy
+// ---------------------------------------------------------------------------
 app.post('/api/generate', async (req, res) => {
   const { prompt, negative_prompt, width, height, steps, guidance, seed } = req.body;
-
   const workflow = buildWorkflow({ prompt, negative_prompt, width, height, steps, guidance, seed });
   workflow["8"].inputs.filename_prefix = buildFilenamePrefix();
-
   try {
     const response = await fetch(`${BASE_URL}/run`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ input: { workflow } }),
     });
-    const data = await response.json();
-    res.json(data);
+    res.json(await response.json());
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Poll job status / retrieve result
 app.get('/api/status/:jobId', async (req, res) => {
-  const { jobId } = req.params;
   try {
-    const response = await fetch(`${BASE_URL}/status/${jobId}`, { headers });
-    const data = await response.json();
-    res.json(data);
+    const response = await fetch(`${BASE_URL}/status/${req.params.jobId}`, { headers });
+    res.json(await response.json());
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
