@@ -285,7 +285,7 @@ function buildWorkflowQwen2511({ prompt, image_filename, seed }) {
       class_type: "UNETLoader",
       inputs: {
         unet_name: "qwen_image_edit_2511_bf16.safetensors",
-        weight_dtype: "default",
+        weight_dtype: "fp8_e4m3fn",
       },
     },
     160: {
