@@ -288,6 +288,23 @@
     .history-dl:hover { border-color: #6366f1; color: #fff; }
 
     .history-empty { color: #333; font-size: 0.85rem; padding: 0.5rem 0; }
+
+    /* ── LoRA toggles ── */
+    .lora-toggles { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .lora-toggle {
+      padding: 0.3rem 0.75rem;
+      border: 1px solid #444;
+      border-radius: 999px;
+      background: transparent;
+      color: #666;
+      font-size: 0.78rem;
+      font-weight: 500;
+      cursor: pointer;
+      width: auto;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+    .lora-toggle:hover:not(:disabled) { border-color: #6366f1; color: #aaa; background: transparent; }
+    .lora-toggle.active { background: #6366f1; border-color: #6366f1; color: #fff; }
   </style>
 </head>
 <body>
@@ -318,6 +335,15 @@
       <div>
         <label for="prompt">Prompt</label>
         <textarea id="prompt" placeholder="a photo of an astronaut riding a horse on mars">a photo of an astronaut riding a horse on mars</textarea>
+      </div>
+      <div id="lorasSection" style="display:none">
+        <label>LoRAs</label>
+        <div class="lora-toggles">
+          <button class="lora-toggle" data-lora="Qwen4Play" onclick="toggleLora(this)">Qwen4Play</button>
+          <button class="lora-toggle" data-lora="nsfw_adv"  onclick="toggleLora(this)">NSFW Adv</button>
+          <button class="lora-toggle" data-lora="spanking"  onclick="toggleLora(this)">Spanking</button>
+          <button class="lora-toggle" data-lora="Korean"    onclick="toggleLora(this)">Korean</button>
+        </div>
       </div>
       <div id="negativeSection">
         <label for="negative">Negative Prompt</label>
@@ -371,7 +397,9 @@
 
     function onWorkflowChange() {
       const wf = document.getElementById('workflowType').value;
+      const isQwen = wf === 'qwen2512' || wf === 'qwen2511';
       document.getElementById('imageUploadSection').style.display = wf === 'qwen2511' ? '' : 'none';
+      document.getElementById('lorasSection').style.display = isQwen ? '' : 'none';
       document.getElementById('negativeSection').style.display = wf === 'flux' ? '' : 'none';
       document.getElementById('dimensionsSection').style.display = (wf === 'flux' || wf === 'qwen2512') ? '' : 'none';
       document.getElementById('samplerSection').style.display = wf === 'flux' ? '' : 'none';
@@ -382,6 +410,15 @@
         document.getElementById('width').value = 1024;
         document.getElementById('height').value = 1024;
       }
+    }
+
+    function toggleLora(btn) {
+      btn.classList.toggle('active');
+    }
+
+    function getActiveLoras() {
+      return Array.from(document.querySelectorAll('.lora-toggle.active'))
+        .map(btn => btn.dataset.lora);
     }
 
     function onImageSelected(event) {
@@ -509,8 +546,10 @@
         } else if (workflowType === 'qwen2512') {
           body.width = parseInt(document.getElementById('width').value);
           body.height = parseInt(document.getElementById('height').value);
+          body.loras = getActiveLoras();
         } else if (workflowType === 'qwen2511') {
           body.image = uploadedImageBase64;
+          body.loras = getActiveLoras();
         }
         const res = await fetch('/api/generate', {
           method: 'POST',
