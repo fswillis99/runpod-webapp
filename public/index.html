@@ -157,13 +157,69 @@
     }
     .btn-download:hover { border-color: #6366f1; color: #fff; }
 
-    .queue-badge {
+    .queue-panel {
       display: none;
-      font-size: 0.75rem;
-      color: #a78bfa;
-      text-align: center;
-      padding: 0.25rem 0;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      overflow: hidden;
     }
+
+    .queue-header {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: #555;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0.45rem 0.75rem;
+      border-bottom: 1px solid #222;
+    }
+
+    .queue-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0.75rem;
+      border-bottom: 1px solid #1e1e1e;
+    }
+    .queue-item:last-child { border-bottom: none; }
+
+    .queue-pos {
+      flex-shrink: 0;
+      font-size: 0.68rem;
+      color: #444;
+      min-width: 1rem;
+      text-align: right;
+    }
+
+    .queue-wf {
+      flex-shrink: 0;
+      font-size: 0.68rem;
+      color: #6366f1;
+    }
+
+    .queue-prompt {
+      flex: 1;
+      min-width: 0;
+      font-size: 0.78rem;
+      color: #888;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .queue-remove {
+      flex-shrink: 0;
+      background: none;
+      border: none;
+      color: #444;
+      font-size: 1rem;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0;
+      width: auto;
+      transition: color 0.15s;
+    }
+    .queue-remove:hover { color: #f87171; background: none; }
 
     /* ── Right panel: image ── */
     .panel-image {
@@ -378,7 +434,10 @@
         </div>
       </div>
       <button id="generateBtn" onclick="generate()">Generate</button>
-      <div id="queueStatus" class="queue-badge"></div>
+      <div id="queueStatus" class="queue-panel">
+        <div class="queue-header">Queued</div>
+        <div id="queueList"></div>
+      </div>
       <a id="downloadBtn" class="btn-download">Download</a>
       <div class="status-bar" id="status">Ready</div>
     </div>
@@ -459,14 +518,28 @@
       document.getElementById('spinner').classList.toggle('active', active);
     }
 
+    const WF_LABELS = { flux: 'Flux', qwen2512: 'Qwen 2512', qwen2511: 'Qwen 2511' };
+
     function updateQueueDisplay() {
-      const el = document.getElementById('queueStatus');
-      if (jobQueue.length > 0) {
-        el.textContent = `${jobQueue.length} job${jobQueue.length > 1 ? 's' : ''} queued`;
-        el.style.display = 'block';
-      } else {
-        el.style.display = 'none';
+      const panel = document.getElementById('queueStatus');
+      if (jobQueue.length === 0) {
+        panel.style.display = 'none';
+        return;
       }
+      document.getElementById('queueList').innerHTML = jobQueue.map((job, i) => `
+        <div class="queue-item">
+          <span class="queue-pos">${i + 1}</span>
+          <span class="queue-wf">${escapeHtml(WF_LABELS[job.workflowType] || job.workflowType)}</span>
+          <span class="queue-prompt">${escapeHtml(job.prompt)}</span>
+          <button class="queue-remove" onclick="removeFromQueue(${i})" title="Remove">×</button>
+        </div>
+      `).join('');
+      panel.style.display = 'block';
+    }
+
+    function removeFromQueue(index) {
+      jobQueue.splice(index, 1);
+      updateQueueDisplay();
     }
 
     function escapeHtml(str) {
