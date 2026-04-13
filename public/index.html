@@ -280,7 +280,18 @@
       border-bottom: 1px solid #222;
     }
 
-    .history-list { display: flex; flex-direction: column; gap: 0.6rem; }
+    .history-list { display: flex; flex-direction: column; gap: 1.25rem; }
+
+    .history-group-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: #444;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+    }
+
+    .history-group-cards { display: flex; flex-direction: column; gap: 0.6rem; }
 
     .history-card {
       display: flex;
@@ -598,6 +609,35 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
+    function dateGroupLabel(isoTimestamp) {
+      const d = new Date(isoTimestamp);
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+      if (d.toDateString() === today.toDateString()) return 'Today';
+      if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+      return d.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    }
+
+    function renderHistoryCard(e) {
+      const wfLabels = { flux: 'Flux', qwen2512: 'Qwen 2512', qwen2511: 'Qwen 2511' };
+      return `
+        <div class="history-card" onclick="loadFromHistory(${e.id})">
+          <img class="history-thumb" src="data:image/png;base64,${e.image}" alt="" />
+          <div class="history-meta">
+            <div class="history-prompt">${escapeHtml(e.prompt)}</div>
+            ${e.negative_prompt ? `<div class="history-negative">− ${escapeHtml(e.negative_prompt)}</div>` : ''}
+            ${e.loras && e.loras.length ? `<div class="history-loras">${e.loras.map(l => `<span class="history-lora-pill">${escapeHtml(l)}</span>`).join('')}</div>` : ''}
+            <div class="history-time">${new Date(e.timestamp).toLocaleTimeString()}${e.workflow_type ? ` · ${escapeHtml(wfLabels[e.workflow_type] || e.workflow_type)}` : ''}</div>
+          </div>
+          <div class="history-actions">
+            <a class="history-dl" href="data:image/png;base64,${e.image}"
+               download="${escapeHtml(e.filename || 'image.png')}"
+               onclick="event.stopPropagation()">Download</a>
+          </div>
+        </div>`;
+    }
+
     async function refreshHistory() {
       try {
         const res = await fetch('/api/history');
@@ -607,21 +647,22 @@
           list.innerHTML = '<div class="history-empty">No history yet.</div>';
           return;
         }
-        const wfLabels = { flux: 'Flux', qwen2512: 'Qwen 2512', qwen2511: 'Qwen 2511' };
-        list.innerHTML = historyEntries.map(e => `
-          <div class="history-card" onclick="loadFromHistory(${e.id})">
-            <img class="history-thumb" src="data:image/png;base64,${e.image}" alt="" />
-            <div class="history-meta">
-              <div class="history-prompt">${escapeHtml(e.prompt)}</div>
-              ${e.negative_prompt ? `<div class="history-negative">− ${escapeHtml(e.negative_prompt)}</div>` : ''}
-              ${e.loras && e.loras.length ? `<div class="history-loras">${e.loras.map(l => `<span class="history-lora-pill">${escapeHtml(l)}</span>`).join('')}</div>` : ''}
-              <div class="history-time">${new Date(e.timestamp).toLocaleString()}${e.workflow_type ? ` · ${escapeHtml(wfLabels[e.workflow_type] || e.workflow_type)}` : ''}</div>
-            </div>
-            <div class="history-actions">
-              <a class="history-dl" href="data:image/png;base64,${e.image}"
-                 download="${escapeHtml(e.filename || 'image.png')}"
-                 onclick="event.stopPropagation()">Download</a>
-            </div>
+        // Group entries by calendar date (newest first, preserving server order)
+        const groups = [];
+        const groupMap = new Map();
+        for (const e of historyEntries) {
+          const label = dateGroupLabel(e.timestamp);
+          if (!groupMap.has(label)) {
+            const g = { label, entries: [] };
+            groups.push(g);
+            groupMap.set(label, g);
+          }
+          groupMap.get(label).entries.push(e);
+        }
+        list.innerHTML = groups.map(g => `
+          <div>
+            <div class="history-group-label">${escapeHtml(g.label)}</div>
+            <div class="history-group-cards">${g.entries.map(renderHistoryCard).join('')}</div>
           </div>
         `).join('');
       } catch (err) {
