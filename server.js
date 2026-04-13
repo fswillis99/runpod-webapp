@@ -63,7 +63,7 @@ app.get("/api/history", (req, res) => {
 });
 
 app.post("/api/history", (req, res) => {
-  const { prompt, negative_prompt, workflow_type, filename, image, timestamp } =
+  const { prompt, negative_prompt, workflow_type, loras, filename, image, timestamp } =
     req.body;
   const history = loadHistory();
   history.unshift({
@@ -72,6 +72,7 @@ app.post("/api/history", (req, res) => {
     prompt,
     negative_prompt,
     workflow_type,
+    loras,
     filename,
     image,
   });
