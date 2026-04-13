@@ -157,6 +157,14 @@
     }
     .btn-download:hover { border-color: #6366f1; color: #fff; }
 
+    .queue-badge {
+      display: none;
+      font-size: 0.75rem;
+      color: #a78bfa;
+      text-align: center;
+      padding: 0.25rem 0;
+    }
+
     /* ── Right panel: image ── */
     .panel-image {
       flex: 1;
@@ -370,6 +378,7 @@
         </div>
       </div>
       <button id="generateBtn" onclick="generate()">Generate</button>
+      <div id="queueStatus" class="queue-badge"></div>
       <a id="downloadBtn" class="btn-download">Download</a>
       <div class="status-bar" id="status">Ready</div>
     </div>
@@ -394,6 +403,11 @@
     const POLL_INTERVAL_MS = 2000;
     let historyEntries = [];
     let uploadedImageBase64 = null;
+
+    // Queue state
+    let isProcessing = false;
+    let jobQueue = [];
+    let currentBlobUrl = null;
 
     function onWorkflowChange() {
       const wf = document.getElementById('workflowType').value;
@@ -441,9 +455,18 @@
       el.className = 'status-bar' + (type ? ' ' + type : '');
     }
 
-    function setLoading(loading) {
-      document.getElementById('generateBtn').disabled = loading;
-      document.getElementById('spinner').classList.toggle('active', loading);
+    function setSpinner(active) {
+      document.getElementById('spinner').classList.toggle('active', active);
+    }
+
+    function updateQueueDisplay() {
+      const el = document.getElementById('queueStatus');
+      if (jobQueue.length > 0) {
+        el.textContent = `${jobQueue.length} job${jobQueue.length > 1 ? 's' : ''} queued`;
+        el.style.display = 'block';
+      } else {
+        el.style.display = 'none';
+      }
     }
 
     function escapeHtml(str) {
@@ -452,13 +475,26 @@
         .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    function showImage(dataUrl, filename) {
+    // Converts raw base64 PNG data to a blob: URL so browsers allow right-click → open in new tab.
+    function base64ToBlobUrl(base64Data) {
+      const bytes = atob(base64Data);
+      const arr = new Uint8Array(bytes.length);
+      for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+      const blob = new Blob([arr], { type: 'image/png' });
+      return URL.createObjectURL(blob);
+    }
+
+    function showImage(base64Data, filename) {
+      if (currentBlobUrl) {
+        URL.revokeObjectURL(currentBlobUrl);
+      }
+      currentBlobUrl = base64ToBlobUrl(base64Data);
       const img = document.getElementById('resultImg');
-      img.src = dataUrl;
+      img.src = currentBlobUrl;
       img.style.display = 'block';
       document.getElementById('placeholder').style.display = 'none';
       const dl = document.getElementById('downloadBtn');
-      dl.href = dataUrl;
+      dl.href = currentBlobUrl;
       dl.download = filename;
       dl.style.display = 'block';
     }
@@ -466,7 +502,7 @@
     function loadFromHistory(id) {
       const entry = historyEntries.find(e => e.id === id);
       if (!entry) return;
-      showImage('data:image/png;base64,' + entry.image, entry.filename);
+      showImage(entry.image, entry.filename);
       document.getElementById('prompt').value = entry.prompt;
       document.getElementById('negative').value = entry.negative_prompt || '';
       if (entry.workflow_type) {
@@ -520,7 +556,29 @@
       }
     }
 
-    async function generate() {
+    // Snapshot current form values into a job params object.
+    function buildJobParams() {
+      const workflowType = document.getElementById('workflowType').value;
+      const prompt = document.getElementById('prompt').value.trim();
+      const params = { workflowType, prompt };
+      if (workflowType === 'flux') {
+        params.negative_prompt = document.getElementById('negative').value;
+        params.width = parseInt(document.getElementById('width').value);
+        params.height = parseInt(document.getElementById('height').value);
+        params.steps = parseInt(document.getElementById('steps').value);
+        params.guidance = parseFloat(document.getElementById('guidance').value);
+      } else if (workflowType === 'qwen2512') {
+        params.width = parseInt(document.getElementById('width').value);
+        params.height = parseInt(document.getElementById('height').value);
+        params.loras = getActiveLoras();
+      } else if (workflowType === 'qwen2511') {
+        params.image = uploadedImageBase64;
+        params.loras = getActiveLoras();
+      }
+      return params;
+    }
+
+    function generate() {
       const prompt = document.getElementById('prompt').value.trim();
       if (!prompt) { setStatus('Please enter a prompt.', 'error'); return; }
       const workflowType = document.getElementById('workflowType').value;
@@ -528,7 +586,21 @@
         setStatus('Please upload an input image for image edit.', 'error'); return;
       }
 
-      setLoading(true);
+      const params = buildJobParams();
+
+      if (isProcessing) {
+        jobQueue.push(params);
+        updateQueueDisplay();
+        setStatus(`Added to queue (position ${jobQueue.length})`, 'success');
+        return;
+      }
+
+      runJob(params);
+    }
+
+    async function runJob(params) {
+      isProcessing = true;
+      setSpinner(true);
       setStatus('Submitting job…');
       document.getElementById('resultImg').style.display = 'none';
       document.getElementById('placeholder').style.display = 'flex';
@@ -536,25 +608,10 @@
 
       let jobId;
       try {
-        const body = { workflowType, prompt };
-        if (workflowType === 'flux') {
-          body.negative_prompt = document.getElementById('negative').value;
-          body.width = parseInt(document.getElementById('width').value);
-          body.height = parseInt(document.getElementById('height').value);
-          body.steps = parseInt(document.getElementById('steps').value);
-          body.guidance = parseFloat(document.getElementById('guidance').value);
-        } else if (workflowType === 'qwen2512') {
-          body.width = parseInt(document.getElementById('width').value);
-          body.height = parseInt(document.getElementById('height').value);
-          body.loras = getActiveLoras();
-        } else if (workflowType === 'qwen2511') {
-          body.image = uploadedImageBase64;
-          body.loras = getActiveLoras();
-        }
         const res = await fetch('/api/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
+          body: JSON.stringify(params),
         });
         const data = await res.json();
         if (data.error) throw new Error(data.error);
@@ -562,7 +619,7 @@
         setStatus(`Job submitted — polling (id: ${jobId})…`);
       } catch (err) {
         setStatus('Submission failed: ' + err.message, 'error');
-        setLoading(false);
+        finishJob();
         return;
       }
 
@@ -575,22 +632,23 @@
           const status = data.status;
 
           if (status === 'IN_QUEUE' || status === 'IN_PROGRESS') {
-            setStatus(`Status: ${status} (attempt ${attempts})…`);
+            const queueNote = jobQueue.length > 0 ? ` · ${jobQueue.length} queued` : '';
+            setStatus(`Status: ${status} (attempt ${attempts})${queueNote}…`);
             setTimeout(poll, POLL_INTERVAL_MS);
           } else if (status === 'COMPLETED') {
             const imageEntry = data.output?.images?.[0];
             if (!imageEntry?.data) throw new Error('No image in response');
-            showImage('data:image/png;base64,' + imageEntry.data, imageEntry.filename);
+            showImage(imageEntry.data, imageEntry.filename);
             setStatus('Done!', 'success');
-            setLoading(false);
             await saveToHistory({
-              prompt,
-              negative_prompt: document.getElementById('negative').value,
-              workflow_type: workflowType,
+              prompt: params.prompt,
+              negative_prompt: params.negative_prompt,
+              workflow_type: params.workflowType,
               filename: imageEntry.filename,
               image: imageEntry.data,
             });
             refreshCredits();
+            finishJob();
           } else if (status === 'FAILED') {
             throw new Error(`Job failed: ${data.error || JSON.stringify(data.output) || 'no details'}`);
           } else {
@@ -598,11 +656,24 @@
           }
         } catch (err) {
           setStatus('Error: ' + err.message, 'error');
-          setLoading(false);
+          finishJob();
         }
       };
 
       setTimeout(poll, POLL_INTERVAL_MS);
+    }
+
+    function finishJob() {
+      isProcessing = false;
+      setSpinner(false);
+      if (jobQueue.length > 0) {
+        const next = jobQueue.shift();
+        updateQueueDisplay();
+        setStatus(`Starting next queued job… (${jobQueue.length} remaining)`);
+        setTimeout(() => runJob(next), 500);
+      } else {
+        updateQueueDisplay();
+      }
     }
 
     async function refreshCredits() {
