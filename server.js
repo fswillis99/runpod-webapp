@@ -44,7 +44,7 @@ app.get("/api/credits", async (req, res) => {
 // History (persisted to history.json, newest first, max 20 entries)
 // ---------------------------------------------------------------------------
 const HISTORY_FILE = path.join(__dirname, "history.json");
-const MAX_HISTORY = 20;
+const MAX_HISTORY = 200;
 
 function loadHistory() {
   try {
