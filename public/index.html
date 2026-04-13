@@ -353,6 +353,15 @@
 
     .history-empty { color: #333; font-size: 0.85rem; padding: 0.5rem 0; }
 
+    .history-loras { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.15rem; }
+    .history-lora-pill {
+      font-size: 0.65rem;
+      padding: 0.1rem 0.45rem;
+      border: 1px solid #33336a;
+      border-radius: 999px;
+      color: #7878c0;
+    }
+
     /* ── LoRA toggles ── */
     .lora-toggles { display: flex; flex-wrap: wrap; gap: 0.5rem; }
     .lora-toggle {
@@ -582,6 +591,9 @@
         document.getElementById('workflowType').value = entry.workflow_type;
         onWorkflowChange();
       }
+      document.querySelectorAll('.lora-toggle').forEach(btn => {
+        btn.classList.toggle('active', !!(entry.loras && entry.loras.includes(btn.dataset.lora)));
+      });
       setStatus('Loaded from history', 'success');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -602,6 +614,7 @@
             <div class="history-meta">
               <div class="history-prompt">${escapeHtml(e.prompt)}</div>
               ${e.negative_prompt ? `<div class="history-negative">− ${escapeHtml(e.negative_prompt)}</div>` : ''}
+              ${e.loras && e.loras.length ? `<div class="history-loras">${e.loras.map(l => `<span class="history-lora-pill">${escapeHtml(l)}</span>`).join('')}</div>` : ''}
               <div class="history-time">${new Date(e.timestamp).toLocaleString()}${e.workflow_type ? ` · ${escapeHtml(wfLabels[e.workflow_type] || e.workflow_type)}` : ''}</div>
             </div>
             <div class="history-actions">
@@ -616,12 +629,12 @@
       }
     }
 
-    async function saveToHistory({ prompt, negative_prompt, workflow_type, filename, image }) {
+    async function saveToHistory({ prompt, negative_prompt, workflow_type, loras, filename, image }) {
       try {
         await fetch('/api/history', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt, negative_prompt, workflow_type, filename, image, timestamp: new Date().toISOString() }),
+          body: JSON.stringify({ prompt, negative_prompt, workflow_type, loras, filename, image, timestamp: new Date().toISOString() }),
         });
         await refreshHistory();
       } catch (err) {
@@ -717,6 +730,7 @@
               prompt: params.prompt,
               negative_prompt: params.negative_prompt,
               workflow_type: params.workflowType,
+              loras: params.loras,
               filename: imageEntry.filename,
               image: imageEntry.data,
             });
