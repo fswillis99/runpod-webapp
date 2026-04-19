@@ -1030,8 +1030,11 @@
       isProcessing = true;
       setSpinner(true);
       setStatus('Submitting job…');
-      document.getElementById('resultImg').style.display = 'none';
-      document.getElementById('placeholder').style.display = 'flex';
+      // Keep any existing image visible under the spinner overlay.
+      // Only show the placeholder when there is no image yet.
+      if (document.getElementById('resultImg').style.display === 'none') {
+        document.getElementById('placeholder').style.display = 'flex';
+      }
       document.getElementById('downloadBtn').style.display = 'none';
 
       let jobId;
