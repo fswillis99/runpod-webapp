@@ -617,7 +617,7 @@
     function loadFromHistory(id) {
       const entry = historyEntries.find(e => e.id === id);
       if (!entry) return;
-      showImage(`/images/${entry.id}.png`, entry.filename);
+      showImage(`/images/${entry.filename}`, entry.filename);
       document.getElementById('prompt').value = entry.prompt;
       document.getElementById('negative').value = entry.negative_prompt || '';
       if (entry.workflow_type) {
@@ -645,7 +645,7 @@
       const wfLabels = { flux: 'Flux', qwen2512: 'Qwen 2512', qwen2511: 'Qwen 2511' };
       return `
         <div class="history-card" onclick="loadFromHistory(${e.id})">
-          <img class="history-thumb" src="/images/${e.id}.png" alt="" />
+          <img class="history-thumb" src="/images/${escapeHtml(e.filename || '')}" alt="" />
           <div class="history-meta">
             <div class="history-prompt">${escapeHtml(e.prompt)}</div>
             ${e.negative_prompt ? `<div class="history-negative">− ${escapeHtml(e.negative_prompt)}</div>` : ''}
@@ -653,7 +653,7 @@
             <div class="history-time">${new Date(e.timestamp).toLocaleTimeString()}${e.workflow_type ? ` · ${escapeHtml(wfLabels[e.workflow_type] || e.workflow_type)}` : ''}</div>
           </div>
           <div class="history-actions">
-            <a class="history-dl" href="/images/${e.id}.png"
+            <a class="history-dl" href="/images/${escapeHtml(e.filename || '')}"
                download="${escapeHtml(e.filename || 'image.png')}"
                onclick="event.stopPropagation()">Download</a>
             <button class="history-delete" onclick="event.stopPropagation(); deleteFromHistory(${e.id})" title="Delete">&#x2715;</button>
