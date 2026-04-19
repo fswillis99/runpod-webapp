@@ -52,10 +52,10 @@ function addPngMetadata(pngBuf, metadata) {
   return Buffer.concat([pngBuf.slice(0, iendPos), ...chunks, pngBuf.slice(iendPos)]);
 }
 
-function saveImageFile(id, base64, metadata) {
+function saveImageFile(filename, base64, metadata) {
   let buf = Buffer.from(base64, "base64");
   buf = addPngMetadata(buf, metadata);
-  fs.writeFileSync(path.join(IMAGES_DIR, `${id}.png`), buf);
+  fs.writeFileSync(path.join(IMAGES_DIR, filename), buf);
 }
 
 const API_KEY = process.env.RUNPOD_API_KEY;
@@ -116,7 +116,7 @@ function migrateHistory() {
   for (const entry of history) {
     if (entry.image) {
       try {
-        saveImageFile(entry.id, entry.image, {
+        saveImageFile(entry.filename || `${entry.id}.png`, entry.image, {
           prompt: entry.prompt || "",
           workflow_type: entry.workflow_type || "",
           loras: Array.isArray(entry.loras) ? entry.loras.join(",") : "",
@@ -143,8 +143,8 @@ app.post("/api/history", (req, res) => {
   const { prompt, negative_prompt, workflow_type, loras, filename, image, timestamp } =
     req.body;
   const id = Date.now();
-  if (image) {
-    saveImageFile(id, image, {
+  if (image && filename) {
+    saveImageFile(filename, image, {
       prompt: prompt || "",
       workflow_type: workflow_type || "",
       loras: Array.isArray(loras) ? loras.join(",") : "",
@@ -159,10 +159,14 @@ app.post("/api/history", (req, res) => {
 
 app.delete("/api/history/:id", (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const history = loadHistory().filter(e => e.id !== id);
-  saveHistory(history);
-  const imgPath = path.join(IMAGES_DIR, `${id}.png`);
-  if (fs.existsSync(imgPath)) fs.unlinkSync(imgPath);
+  const history = loadHistory();
+  const entry = history.find(e => e.id === id);
+  const filtered = history.filter(e => e.id !== id);
+  saveHistory(filtered);
+  if (entry?.filename) {
+    const imgPath = path.join(IMAGES_DIR, entry.filename);
+    if (fs.existsSync(imgPath)) fs.unlinkSync(imgPath);
+  }
   res.json({ ok: true });
 });
 
