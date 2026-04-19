@@ -8,6 +8,56 @@ const app = express();
 app.use(express.json({ limit: "15mb" })); // images arrive as base64
 app.use(express.static("public"));
 
+// ---------------------------------------------------------------------------
+// Image file storage
+// ---------------------------------------------------------------------------
+const IMAGES_DIR = path.join(__dirname, "images");
+if (!fs.existsSync(IMAGES_DIR)) fs.mkdirSync(IMAGES_DIR);
+app.use("/images", express.static(IMAGES_DIR));
+
+// CRC32 implementation for PNG chunk checksums
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    t[i] = c;
+  }
+  return t;
+})();
+
+function crc32(buf) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+// Build a PNG iTXt chunk (supports UTF-8 text)
+function makePngItxtChunk(keyword, text) {
+  const data = Buffer.concat([
+    Buffer.from(keyword, "latin1"),
+    Buffer.from([0, 0, 0, 0, 0]), // null-term, comp_flag=0, comp_method=0, lang=null, trans_kw=null
+    Buffer.from(String(text), "utf8"),
+  ]);
+  const type = Buffer.from("iTXt");
+  const len = Buffer.allocUnsafe(4); len.writeUInt32BE(data.length);
+  const crcBuf = Buffer.allocUnsafe(4); crcBuf.writeUInt32BE(crc32(Buffer.concat([type, data])));
+  return Buffer.concat([len, type, data, crcBuf]);
+}
+
+// Insert iTXt metadata chunks into a PNG buffer (before IEND)
+function addPngMetadata(pngBuf, metadata) {
+  const iendPos = pngBuf.length - 12; // IEND is always the last 12 bytes
+  const chunks = Object.entries(metadata).map(([k, v]) => makePngItxtChunk(k, v));
+  return Buffer.concat([pngBuf.slice(0, iendPos), ...chunks, pngBuf.slice(iendPos)]);
+}
+
+function saveImageFile(id, base64, metadata) {
+  let buf = Buffer.from(base64, "base64");
+  buf = addPngMetadata(buf, metadata);
+  fs.writeFileSync(path.join(IMAGES_DIR, `${id}.png`), buf);
+}
+
 const API_KEY = process.env.RUNPOD_API_KEY;
 const ENDPOINT_ID = process.env.RUNPOD_ENDPOINT_ID;
 const MODEL_NAME = process.env.MODEL_NAME || "flux1-dev-fp8.safetensors";
@@ -41,7 +91,8 @@ app.get("/api/credits", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// History (persisted to history.json, newest first, max 20 entries)
+// History (persisted to history.json, newest first, max 200 entries)
+// Images are stored separately in images/{id}.png
 // ---------------------------------------------------------------------------
 const HISTORY_FILE = path.join(__dirname, "history.json");
 const MAX_HISTORY = 200;
@@ -58,6 +109,32 @@ function saveHistory(history) {
   fs.writeFileSync(HISTORY_FILE, JSON.stringify(history));
 }
 
+// Migrate legacy history entries that have embedded base64 image data
+function migrateHistory() {
+  const history = loadHistory();
+  let changed = false;
+  for (const entry of history) {
+    if (entry.image) {
+      try {
+        saveImageFile(entry.id, entry.image, {
+          prompt: entry.prompt || "",
+          workflow_type: entry.workflow_type || "",
+          loras: Array.isArray(entry.loras) ? entry.loras.join(",") : "",
+        });
+      } catch (err) {
+        console.warn(`Failed to migrate image for entry ${entry.id}:`, err.message);
+      }
+      delete entry.image;
+      changed = true;
+    }
+  }
+  if (changed) {
+    saveHistory(history);
+    console.log("Migrated embedded history images to image files.");
+  }
+}
+migrateHistory();
+
 app.get("/api/history", (req, res) => {
   res.json(loadHistory());
 });
@@ -65,19 +142,27 @@ app.get("/api/history", (req, res) => {
 app.post("/api/history", (req, res) => {
   const { prompt, negative_prompt, workflow_type, loras, filename, image, timestamp } =
     req.body;
+  const id = Date.now();
+  if (image) {
+    saveImageFile(id, image, {
+      prompt: prompt || "",
+      workflow_type: workflow_type || "",
+      loras: Array.isArray(loras) ? loras.join(",") : "",
+    });
+  }
   const history = loadHistory();
-  history.unshift({
-    id: Date.now(),
-    timestamp,
-    prompt,
-    negative_prompt,
-    workflow_type,
-    loras,
-    filename,
-    image,
-  });
+  history.unshift({ id, timestamp, prompt, negative_prompt, workflow_type, loras, filename });
   if (history.length > MAX_HISTORY) history.splice(MAX_HISTORY);
   saveHistory(history);
+  res.json({ ok: true });
+});
+
+app.delete("/api/history/:id", (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const history = loadHistory().filter(e => e.id !== id);
+  saveHistory(history);
+  const imgPath = path.join(IMAGES_DIR, `${id}.png`);
+  if (fs.existsSync(imgPath)) fs.unlinkSync(imgPath);
   res.json({ ok: true });
 });
 

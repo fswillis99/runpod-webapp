@@ -347,7 +347,7 @@
       padding-top: 0.25rem;
     }
 
-    .history-actions { flex-shrink: 0; }
+    .history-actions { flex-shrink: 0; display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end; }
 
     .history-dl {
       display: inline-block;
@@ -361,6 +361,21 @@
       transition: border-color 0.15s, color 0.15s;
     }
     .history-dl:hover { border-color: #6366f1; color: #fff; }
+
+    .history-delete {
+      display: inline-block;
+      padding: 0.3rem 0.55rem;
+      border: 1px solid #333;
+      border-radius: 6px;
+      background: transparent;
+      color: #555;
+      font-size: 0.85rem;
+      line-height: 1;
+      cursor: pointer;
+      width: auto;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .history-delete:hover { border-color: #cc2233; color: #cc2233; }
 
     .history-empty { color: #333; font-size: 0.85rem; padding: 0.5rem 0; }
 
@@ -577,17 +592,24 @@
       return URL.createObjectURL(blob);
     }
 
-    function showImage(base64Data, filename) {
+    function showImage(src, filename) {
       if (currentBlobUrl) {
         URL.revokeObjectURL(currentBlobUrl);
+        currentBlobUrl = null;
       }
-      currentBlobUrl = base64ToBlobUrl(base64Data);
+      let displaySrc;
+      if (src.startsWith('/') || src.startsWith('http')) {
+        displaySrc = src;
+      } else {
+        currentBlobUrl = base64ToBlobUrl(src);
+        displaySrc = currentBlobUrl;
+      }
       const img = document.getElementById('resultImg');
-      img.src = currentBlobUrl;
+      img.src = displaySrc;
       img.style.display = 'block';
       document.getElementById('placeholder').style.display = 'none';
       const dl = document.getElementById('downloadBtn');
-      dl.href = currentBlobUrl;
+      dl.href = displaySrc;
       dl.download = filename;
       dl.style.display = 'block';
     }
@@ -595,7 +617,7 @@
     function loadFromHistory(id) {
       const entry = historyEntries.find(e => e.id === id);
       if (!entry) return;
-      showImage(entry.image, entry.filename);
+      showImage(`/images/${entry.id}.png`, entry.filename);
       document.getElementById('prompt').value = entry.prompt;
       document.getElementById('negative').value = entry.negative_prompt || '';
       if (entry.workflow_type) {
@@ -623,7 +645,7 @@
       const wfLabels = { flux: 'Flux', qwen2512: 'Qwen 2512', qwen2511: 'Qwen 2511' };
       return `
         <div class="history-card" onclick="loadFromHistory(${e.id})">
-          <img class="history-thumb" src="data:image/png;base64,${e.image}" alt="" />
+          <img class="history-thumb" src="/images/${e.id}.png" alt="" />
           <div class="history-meta">
             <div class="history-prompt">${escapeHtml(e.prompt)}</div>
             ${e.negative_prompt ? `<div class="history-negative">− ${escapeHtml(e.negative_prompt)}</div>` : ''}
@@ -631,9 +653,10 @@
             <div class="history-time">${new Date(e.timestamp).toLocaleTimeString()}${e.workflow_type ? ` · ${escapeHtml(wfLabels[e.workflow_type] || e.workflow_type)}` : ''}</div>
           </div>
           <div class="history-actions">
-            <a class="history-dl" href="data:image/png;base64,${e.image}"
+            <a class="history-dl" href="/images/${e.id}.png"
                download="${escapeHtml(e.filename || 'image.png')}"
                onclick="event.stopPropagation()">Download</a>
+            <button class="history-delete" onclick="event.stopPropagation(); deleteFromHistory(${e.id})" title="Delete">&#x2715;</button>
           </div>
         </div>`;
     }
@@ -680,6 +703,16 @@
         await refreshHistory();
       } catch (err) {
         console.warn('History save failed:', err);
+      }
+    }
+
+    async function deleteFromHistory(id) {
+      if (!confirm('Delete this history entry?')) return;
+      try {
+        await fetch(`/api/history/${id}`, { method: 'DELETE' });
+        await refreshHistory();
+      } catch (err) {
+        console.warn('History delete failed:', err);
       }
     }
 
