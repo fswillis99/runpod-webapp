@@ -246,7 +246,12 @@
       position: relative;
     }
 
-    .panel-image img { width: 100%; height: auto; display: block; border-radius: 12px; }
+    .panel-image img {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: contain;
+      display: block; border-radius: 12px;
+    }
 
     .placeholder { color: #555; font-size: 0.9rem; text-align: center; padding: 2rem; }
 
@@ -1201,6 +1206,17 @@
         if (blob) handleImageFile(blob, 'Pasted image');
       });
     })();
+
+    // Lock the image panel to a stable square; recalculate only on resize.
+    // The img is absolutely positioned (object-fit: contain) so it never
+    // drives the panel's height — images and spinner live inside a fixed box.
+    function updatePanelHeight() {
+      const panel = document.getElementById('imagePanel');
+      const w = panel.getBoundingClientRect().width;
+      if (w > 0) panel.style.height = Math.max(400, Math.round(w)) + 'px';
+    }
+    window.addEventListener('resize', updatePanelHeight);
+    requestAnimationFrame(updatePanelHeight);
 
     // Load history and credits on page init
     refreshHistory();
