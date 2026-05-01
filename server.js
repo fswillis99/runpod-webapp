@@ -352,42 +352,40 @@ function buildWorkflowQwen2512({
   return workflow;
 }
 
-// Qwen-Image 2511 — image edit (turbo mode, 6 steps)
-function buildWorkflowQwen2511({ prompt, image_filename, seed, loras = [] }) {
-  const fname = image_filename || "input.png";
+// Qwen-Image 2511 — image edit with 1–3 reference images
+function buildWorkflowQwen2511({ prompt, image_filenames = [], seed, loras = [] }) {
+  const fnames = image_filenames.length > 0 ? image_filenames.slice(0, 3) : ["input1.png"];
+
   const workflow = {
-    83:  { class_type: "LoadImage",  inputs: { image: fname, upload: "image" } },
     162: { class_type: "CLIPLoader", inputs: { clip_name: "qwen_2.5_vl_7b_fp8_scaled.safetensors", type: "qwen_image" } },
     146: { class_type: "VAELoader",  inputs: { vae_name: "qwen_image_vae.safetensors" } },
-    161: {
-      class_type: "UNETLoader",
-      inputs: { unet_name: "qwen_image_edit_2511_bf16.safetensors", weight_dtype: "fp8_e4m3fn" },
-    },
-    160: { class_type: "FluxKontextImageScale", inputs: { image: ["83", 0] } },
-    // Negative conditioning (empty prompt, image1 = scaled, image2 = original)
-    149: {
-      class_type: "TextEncodeQwenImageEditPlus",
-      inputs: { prompt: "", clip: ["162", 0], vae: ["146", 0], image1: ["160", 0], image2: ["83", 0] },
-    },
-    // Positive conditioning (edit instruction, image1 = scaled, image2 = original)
-    151: {
-      class_type: "TextEncodeQwenImageEditPlus",
-      inputs: { prompt: prompt || "", clip: ["162", 0], vae: ["146", 0], image1: ["160", 0], image2: ["83", 0] },
-    },
-    147: { class_type: "FluxKontextMultiReferenceLatentMethod", inputs: { conditioning: ["149", 0], reference_latents_method: "index_timestep_zero" } },
-    148: { class_type: "FluxKontextMultiReferenceLatentMethod", inputs: { conditioning: ["151", 0], reference_latents_method: "index_timestep_zero" } },
-    145: { class_type: "ModelSamplingAuraFlow", inputs: { model: ["161", 0], shift: 3.1 } },
-    152: { class_type: "CFGNorm",              inputs: { model: ["145", 0], strength: 1 } },
-    153: {
-      class_type: "LoraLoaderModelOnly",
-      inputs: { model: ["152", 0], lora_name: "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors", strength_model: 1 },
-    },
-    156: { class_type: "VAEEncode", inputs: { pixels: ["160", 0], vae: ["146", 0] } },
-    158: { class_type: "VAEDecode", inputs: { samples: ["169", 0], vae: ["146", 0] } },
-    9:   { class_type: "SaveImage", inputs: { images: ["158", 0], filename_prefix: "ComfyUI" } },
+    161: { class_type: "UNETLoader", inputs: { unet_name: "qwen_image_edit_2511_bf16.safetensors", weight_dtype: "fp8_e4m3fn" } },
   };
 
-  // Custom LoRAs chained after Lightning LoRA; KSampler gets final model ref
+  // Node ID pairs [LoadImage, FluxKontextImageScale] for each input image slot
+  const nodePairs = [[83, 500], [501, 502], [503, 504]];
+  const condImageInputs = {};
+
+  fnames.forEach((fname, i) => {
+    const [loadId, scaleId] = nodePairs[i];
+    workflow[loadId]  = { class_type: "LoadImage",             inputs: { image: fname, upload: "image" } };
+    workflow[scaleId] = { class_type: "FluxKontextImageScale", inputs: { image: [String(loadId), 0] } };
+    condImageInputs[`image${i * 2 + 1}`] = [String(scaleId), 0]; // image1, image3, image5
+    condImageInputs[`image${i * 2 + 2}`] = [String(loadId),  0]; // image2, image4, image6
+  });
+
+  const firstScaleId = String(nodePairs[0][1]);
+  workflow[149] = { class_type: "TextEncodeQwenImageEditPlus", inputs: { prompt: "",           clip: ["162", 0], vae: ["146", 0], ...condImageInputs } };
+  workflow[151] = { class_type: "TextEncodeQwenImageEditPlus", inputs: { prompt: prompt || "", clip: ["162", 0], vae: ["146", 0], ...condImageInputs } };
+  workflow[147] = { class_type: "FluxKontextMultiReferenceLatentMethod", inputs: { conditioning: ["149", 0], reference_latents_method: "index_timestep_zero" } };
+  workflow[148] = { class_type: "FluxKontextMultiReferenceLatentMethod", inputs: { conditioning: ["151", 0], reference_latents_method: "index_timestep_zero" } };
+  workflow[145] = { class_type: "ModelSamplingAuraFlow", inputs: { model: ["161", 0], shift: 3.1 } };
+  workflow[152] = { class_type: "CFGNorm",               inputs: { model: ["145", 0], strength: 1 } };
+  workflow[153] = { class_type: "LoraLoaderModelOnly",   inputs: { model: ["152", 0], lora_name: "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors", strength_model: 1 } };
+  workflow[156] = { class_type: "VAEEncode",             inputs: { pixels: [firstScaleId, 0], vae: ["146", 0] } };
+  workflow[158] = { class_type: "VAEDecode",             inputs: { samples: ["169", 0], vae: ["146", 0] } };
+  workflow[9]   = { class_type: "SaveImage",             inputs: { images: ["158", 0], filename_prefix: "ComfyUI" } };
+
   const finalModelRef = buildLoraChain(workflow, ["153", 0], loras);
   workflow[169] = {
     class_type: "KSampler",
@@ -397,11 +395,7 @@ function buildWorkflowQwen2511({ prompt, image_filename, seed, loras = [] }) {
       negative: ["147", 0],
       latent_image: ["156", 0],
       seed: seed ?? Math.floor(Math.random() * 2 ** 32),
-      steps: 6,
-      cfg: 1,
-      sampler_name: "euler",
-      scheduler: "simple",
-      denoise: 1,
+      steps: 6, cfg: 1, sampler_name: "euler", scheduler: "simple", denoise: 1,
     },
   };
   return workflow;
@@ -420,7 +414,6 @@ app.post("/api/generate", async (req, res) => {
     steps,
     guidance,
     seed,
-    image,
     loras = [],
   } = req.body;
 
@@ -438,12 +431,13 @@ app.post("/api/generate", async (req, res) => {
     workflow["60"].inputs.filename_prefix = buildFilenamePrefix("qwen2512");
     input = { workflow };
   } else if (workflowType === "qwen2511") {
-    const image_filename = "input.png";
-    workflow = buildWorkflowQwen2511({ prompt, image_filename, seed, loras });
+    const imgs = (Array.isArray(req.body.images) ? req.body.images : []).slice(0, 3);
+    const image_filenames = imgs.map((img, i) => img.name || `input${i + 1}.png`);
+    workflow = buildWorkflowQwen2511({ prompt, image_filenames, seed, loras });
     workflow["9"].inputs.filename_prefix = buildFilenamePrefix("qwen2511");
     input = {
       workflow,
-      images: image ? [{ name: image_filename, image }] : [],
+      images: imgs.map(img => ({ name: img.name, image: img.data })),
     };
   } else {
     // flux (default)
