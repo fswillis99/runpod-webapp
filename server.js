@@ -91,6 +91,25 @@ app.get("/api/credits", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Image URL proxy — fetches a remote image server-side to avoid CORS
+// ---------------------------------------------------------------------------
+app.get("/api/fetch-image", async (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.status(400).json({ error: "url required" });
+  try {
+    const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const contentType = response.headers.get("content-type") || "image/png";
+    if (!contentType.startsWith("image/")) throw new Error("URL did not return an image");
+    const buffer = await response.buffer();
+    if (buffer.length > 15 * 1024 * 1024) throw new Error("Image too large (max 15 MB)");
+    res.json({ data: buffer.toString("base64"), contentType });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // History (persisted to history.json, newest first, max 200 entries)
 // Images are stored separately in images/{id}.png
 // ---------------------------------------------------------------------------
