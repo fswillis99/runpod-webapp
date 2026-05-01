@@ -778,12 +778,10 @@
     }
 
     function showImage(src, filename) {
-      if (currentBlobUrl) {
-        URL.revokeObjectURL(currentBlobUrl);
-        currentBlobUrl = null;
-      }
+      const prevBlobUrl = currentBlobUrl;
       let displaySrc;
       if (src.startsWith('/') || src.startsWith('http')) {
+        currentBlobUrl = null;
         displaySrc = src;
       } else {
         currentBlobUrl = base64ToBlobUrl(src);
@@ -797,6 +795,11 @@
       dl.href = displaySrc;
       dl.download = filename;
       dl.style.display = 'block';
+      // Revoke the old blob URL only after the new image has loaded to prevent
+      // the img element briefly having an invalid src, which collapses the panel.
+      if (prevBlobUrl) {
+        img.addEventListener('load', () => URL.revokeObjectURL(prevBlobUrl), { once: true });
+      }
     }
 
     function loadFromHistory(id) {
@@ -1033,7 +1036,7 @@
       // Keep any existing image visible under the spinner overlay.
       // Only show the placeholder when there is no image yet.
       if (document.getElementById('resultImg').style.display === 'none') {
-        document.getElementById('placeholder').style.display = 'flex';
+        document.getElementById('placeholder').style.display = '';
       }
       document.getElementById('downloadBtn').style.display = 'none';
 
@@ -1096,14 +1099,16 @@
     }
 
     function finishJob() {
-      isProcessing = false;
       setSpinner(false);
       if (jobQueue.length > 0) {
         const next = jobQueue.shift();
         updateQueueDisplay();
         setStatus(`Starting next queued job… (${jobQueue.length} remaining)`);
+        // Keep isProcessing = true so Generate clicks during the 500ms delay go to
+        // the queue instead of spawning a second concurrent runJob.
         setTimeout(() => runJob(next), 500);
       } else {
+        isProcessing = false;
         updateQueueDisplay();
       }
     }
