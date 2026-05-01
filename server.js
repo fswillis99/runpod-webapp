@@ -359,26 +359,19 @@ function buildWorkflowQwen2511({ prompt, image_filenames = [], seed, loras = [] 
   const workflow = {
     162: { class_type: "CLIPLoader", inputs: { clip_name: "qwen_2.5_vl_7b_fp8_scaled.safetensors", type: "qwen_image" } },
     146: { class_type: "VAELoader",  inputs: { vae_name: "qwen_image_vae.safetensors" } },
-    161: { class_type: "UNETLoader", inputs: { unet_name: "qwen_image_edit_2511_bf16.safetensors", weight_dtype: "fp8_e4m3fn" } },
+    161: { class_type: "UNETLoader", inputs: { unet_name: "qwen_image_edit_2511_bf16.safetensors", weight_dtype: "default" } },
   };
 
-  // TextEncodeQwenImageEditPlus accepts exactly image1/image2/image3.
-  // Primary image uses two slots (scaled + original); a second reference
-  // uses one slot (scaled only). Maximum two input images.
-  const encodedFnames = fnames.slice(0, 2);
-  const nodePairs = [[83, 500], [501, 502]];
+  // TextEncodeQwenImageEditPlus takes one scaled image per slot (image1/image2/image3).
+  // No "original" needed — the reference workflow confirms only the scaled output is passed.
+  const nodePairs = [[83, 500], [501, 502], [503, 504]];
   const condImageInputs = {};
 
-  encodedFnames.forEach((fname, i) => {
+  fnames.forEach((fname, i) => {
     const [loadId, scaleId] = nodePairs[i];
     workflow[loadId]  = { class_type: "LoadImage",             inputs: { image: fname, upload: "image" } };
     workflow[scaleId] = { class_type: "FluxKontextImageScale", inputs: { image: [String(loadId), 0] } };
-    if (i === 0) {
-      condImageInputs.image1 = [String(scaleId), 0]; // scaled primary
-      condImageInputs.image2 = [String(loadId),  0]; // original primary
-    } else {
-      condImageInputs.image3 = [String(scaleId), 0]; // scaled second reference
-    }
+    condImageInputs[`image${i + 1}`] = [String(scaleId), 0]; // image1, image2, image3
   });
 
   const firstScaleId = String(nodePairs[0][1]);
@@ -438,7 +431,7 @@ app.post("/api/generate", async (req, res) => {
     workflow["60"].inputs.filename_prefix = buildFilenamePrefix("qwen2512");
     input = { workflow };
   } else if (workflowType === "qwen2511") {
-    const imgs = (Array.isArray(req.body.images) ? req.body.images : []).slice(0, 2);
+    const imgs = (Array.isArray(req.body.images) ? req.body.images : []).slice(0, 3);
     const image_filenames = imgs.map((img, i) => img.name || `input${i + 1}.png`);
     workflow = buildWorkflowQwen2511({ prompt, image_filenames, seed, loras });
     workflow["9"].inputs.filename_prefix = buildFilenamePrefix("qwen2511");
