@@ -362,16 +362,23 @@ function buildWorkflowQwen2511({ prompt, image_filenames = [], seed, loras = [] 
     161: { class_type: "UNETLoader", inputs: { unet_name: "qwen_image_edit_2511_bf16.safetensors", weight_dtype: "fp8_e4m3fn" } },
   };
 
-  // Node ID pairs [LoadImage, FluxKontextImageScale] for each input image slot
-  const nodePairs = [[83, 500], [501, 502], [503, 504]];
+  // TextEncodeQwenImageEditPlus accepts exactly image1/image2/image3.
+  // Primary image uses two slots (scaled + original); a second reference
+  // uses one slot (scaled only). Maximum two input images.
+  const encodedFnames = fnames.slice(0, 2);
+  const nodePairs = [[83, 500], [501, 502]];
   const condImageInputs = {};
 
-  fnames.forEach((fname, i) => {
+  encodedFnames.forEach((fname, i) => {
     const [loadId, scaleId] = nodePairs[i];
     workflow[loadId]  = { class_type: "LoadImage",             inputs: { image: fname, upload: "image" } };
     workflow[scaleId] = { class_type: "FluxKontextImageScale", inputs: { image: [String(loadId), 0] } };
-    condImageInputs[`image${i * 2 + 1}`] = [String(scaleId), 0]; // image1, image3, image5
-    condImageInputs[`image${i * 2 + 2}`] = [String(loadId),  0]; // image2, image4, image6
+    if (i === 0) {
+      condImageInputs.image1 = [String(scaleId), 0]; // scaled primary
+      condImageInputs.image2 = [String(loadId),  0]; // original primary
+    } else {
+      condImageInputs.image3 = [String(scaleId), 0]; // scaled second reference
+    }
   });
 
   const firstScaleId = String(nodePairs[0][1]);
@@ -431,7 +438,7 @@ app.post("/api/generate", async (req, res) => {
     workflow["60"].inputs.filename_prefix = buildFilenamePrefix("qwen2512");
     input = { workflow };
   } else if (workflowType === "qwen2511") {
-    const imgs = (Array.isArray(req.body.images) ? req.body.images : []).slice(0, 3);
+    const imgs = (Array.isArray(req.body.images) ? req.body.images : []).slice(0, 2);
     const image_filenames = imgs.map((img, i) => img.name || `input${i + 1}.png`);
     workflow = buildWorkflowQwen2511({ prompt, image_filenames, seed, loras });
     workflow["9"].inputs.filename_prefix = buildFilenamePrefix("qwen2511");
