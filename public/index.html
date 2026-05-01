@@ -92,6 +92,19 @@
       position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
     }
 
+    .image-slots { display: flex; flex-direction: column; gap: 0.6rem; }
+    .slot-header { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.2rem; }
+    .slot-label { font-size: 0.75rem; font-weight: 600; color: #888; }
+    .slot-badge { font-size: 0.65rem; padding: 0.05rem 0.4rem; border-radius: 999px; }
+    .required-badge { background: rgba(99,102,241,0.15); color: #6366f1; }
+    .optional-badge { background: #1e1e1e; color: #555; }
+    .slot-clear-btn {
+      margin-left: auto; background: none; border: none; color: #444;
+      font-size: 1rem; line-height: 1; cursor: pointer; width: auto; padding: 0;
+      transition: color 0.15s;
+    }
+    .slot-clear-btn:hover { color: #f87171; background: none; }
+
     .url-input-row { display: flex; gap: 0.5rem; margin-top: 0.4rem; }
     .url-input-row input {
       flex: 1; min-width: 0;
@@ -599,16 +612,60 @@
         </select>
       </div>
       <div id="imageUploadSection" style="display:none">
-        <label>Input Image</label>
-        <div class="image-upload-area" id="imageDropZone" onclick="document.getElementById('imageFile').click()">
-          <img id="uploadPreview" class="upload-preview" alt="Preview" />
-          <input type="file" id="imageFile" accept="image/*" onchange="onImageSelected(event)" style="display:none" />
-          <div class="upload-label" id="uploadLabel">Click · drag &amp; drop · or paste an image</div>
-        </div>
-        <div class="url-input-row">
-          <input type="url" id="imageUrlInput" placeholder="Or load from URL…"
-                 onkeydown="if(event.key==='Enter')loadImageFromUrl()" />
-          <button type="button" id="imageUrlBtn" onclick="loadImageFromUrl()">Load</button>
+        <label>Input Images</label>
+        <div class="image-slots">
+
+          <div class="image-slot">
+            <div class="slot-header">
+              <span class="slot-label">Image 1</span>
+              <span class="slot-badge required-badge">required</span>
+              <button class="slot-clear-btn" id="imgClear0" onclick="clearImageSlot(0)" style="display:none" title="Remove">×</button>
+            </div>
+            <div class="image-upload-area" id="imgDropZone0" onclick="document.getElementById('imgFile0').click()">
+              <img id="imgPreview0" class="upload-preview" alt="" />
+              <input type="file" id="imgFile0" accept="image/*" onchange="onSlotFileSelected(0,event)" style="display:none" />
+              <div class="upload-label" id="imgLabel0">Click · drag &amp; drop · or paste</div>
+            </div>
+            <div class="url-input-row">
+              <input type="url" id="imgUrlInput0" placeholder="Or load from URL…" onkeydown="if(event.key==='Enter')loadSlotFromUrl(0)" />
+              <button type="button" id="imgUrlBtn0" onclick="loadSlotFromUrl(0)">Load</button>
+            </div>
+          </div>
+
+          <div class="image-slot">
+            <div class="slot-header">
+              <span class="slot-label">Image 2</span>
+              <span class="slot-badge optional-badge">optional</span>
+              <button class="slot-clear-btn" id="imgClear1" onclick="clearImageSlot(1)" style="display:none" title="Remove">×</button>
+            </div>
+            <div class="image-upload-area" id="imgDropZone1" onclick="document.getElementById('imgFile1').click()">
+              <img id="imgPreview1" class="upload-preview" alt="" />
+              <input type="file" id="imgFile1" accept="image/*" onchange="onSlotFileSelected(1,event)" style="display:none" />
+              <div class="upload-label" id="imgLabel1">Click · drag &amp; drop</div>
+            </div>
+            <div class="url-input-row">
+              <input type="url" id="imgUrlInput1" placeholder="Or load from URL…" onkeydown="if(event.key==='Enter')loadSlotFromUrl(1)" />
+              <button type="button" id="imgUrlBtn1" onclick="loadSlotFromUrl(1)">Load</button>
+            </div>
+          </div>
+
+          <div class="image-slot">
+            <div class="slot-header">
+              <span class="slot-label">Image 3</span>
+              <span class="slot-badge optional-badge">optional</span>
+              <button class="slot-clear-btn" id="imgClear2" onclick="clearImageSlot(2)" style="display:none" title="Remove">×</button>
+            </div>
+            <div class="image-upload-area" id="imgDropZone2" onclick="document.getElementById('imgFile2').click()">
+              <img id="imgPreview2" class="upload-preview" alt="" />
+              <input type="file" id="imgFile2" accept="image/*" onchange="onSlotFileSelected(2,event)" style="display:none" />
+              <div class="upload-label" id="imgLabel2">Click · drag &amp; drop</div>
+            </div>
+            <div class="url-input-row">
+              <input type="url" id="imgUrlInput2" placeholder="Or load from URL…" onkeydown="if(event.key==='Enter')loadSlotFromUrl(2)" />
+              <button type="button" id="imgUrlBtn2" onclick="loadSlotFromUrl(2)">Load</button>
+            </div>
+          </div>
+
         </div>
       </div>
       <div>
@@ -702,7 +759,7 @@
   <script>
     const POLL_INTERVAL_MS = 2000;
     let historyEntries = [];
-    let uploadedImageBase64 = null;
+    let uploadedImages = [null, null, null]; // each: {data: base64, name: string} | null
 
     // Queue state
     let isProcessing = false;
@@ -735,46 +792,57 @@
         .map(btn => btn.dataset.lora);
     }
 
-    function handleImageFile(file, label) {
+    function handleImageFile(slotIdx, file, label) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        uploadedImageBase64 = e.target.result.split(',')[1];
-        const preview = document.getElementById('uploadPreview');
-        preview.src = e.target.result;
+        const dataUrl = e.target.result;
+        uploadedImages[slotIdx] = { data: dataUrl.split(',')[1], name: label };
+        const preview = document.getElementById(`imgPreview${slotIdx}`);
+        preview.src = dataUrl;
         preview.style.display = 'block';
-        document.getElementById('uploadLabel').textContent = label;
+        document.getElementById(`imgLabel${slotIdx}`).textContent = label;
+        document.getElementById(`imgClear${slotIdx}`).style.display = '';
       };
       reader.readAsDataURL(file);
     }
 
-    function onImageSelected(event) {
+    function onSlotFileSelected(slotIdx, event) {
       const file = event.target.files[0];
-      if (file) handleImageFile(file, file.name);
+      if (file) handleImageFile(slotIdx, file, file.name);
     }
 
-    async function loadImageFromUrl() {
-      const input = document.getElementById('imageUrlInput');
-      const btn = document.getElementById('imageUrlBtn');
+    function clearImageSlot(slotIdx) {
+      uploadedImages[slotIdx] = null;
+      const preview = document.getElementById(`imgPreview${slotIdx}`);
+      preview.src = ''; preview.style.display = 'none';
+      document.getElementById(`imgLabel${slotIdx}`).textContent =
+        slotIdx === 0 ? 'Click \xB7 drag \xA0& drop \xB7 or paste' : 'Click \xB7 drag \xA0& drop';
+      document.getElementById(`imgClear${slotIdx}`).style.display = 'none';
+      document.getElementById(`imgFile${slotIdx}`).value = '';
+    }
+
+    async function loadSlotFromUrl(slotIdx) {
+      const input = document.getElementById(`imgUrlInput${slotIdx}`);
+      const btn   = document.getElementById(`imgUrlBtn${slotIdx}`);
       const url = input.value.trim();
       if (!url) return;
-      btn.disabled = true;
-      btn.textContent = '…';
+      btn.disabled = true; btn.textContent = '…';
       try {
         const res = await fetch('/api/fetch-image?url=' + encodeURIComponent(url));
         const data = await res.json();
         if (data.error) throw new Error(data.error);
-        uploadedImageBase64 = data.data;
-        const preview = document.getElementById('uploadPreview');
-        preview.src = 'data:' + data.contentType + ';base64,' + data.data;
-        preview.style.display = 'block';
         const name = url.split('/').pop().split('?')[0] || 'image from URL';
-        document.getElementById('uploadLabel').textContent = name;
+        uploadedImages[slotIdx] = { data: data.data, name };
+        const preview = document.getElementById(`imgPreview${slotIdx}`);
+        preview.src = `data:${data.contentType};base64,${data.data}`;
+        preview.style.display = 'block';
+        document.getElementById(`imgLabel${slotIdx}`).textContent = name;
+        document.getElementById(`imgClear${slotIdx}`).style.display = '';
         input.value = '';
       } catch (err) {
         setStatus('URL load failed: ' + err.message, 'error');
       } finally {
-        btn.disabled = false;
-        btn.textContent = 'Load';
+        btn.disabled = false; btn.textContent = 'Load';
       }
     }
 
@@ -1053,7 +1121,9 @@
         params.height = parseInt(document.getElementById('height').value);
         params.loras = getActiveLoras();
       } else if (workflowType === 'qwen2511') {
-        params.image = uploadedImageBase64;
+        params.images = uploadedImages
+          .filter(Boolean)
+          .map((img, i) => ({ name: `input${i + 1}.png`, data: img.data }));
         params.loras = getActiveLoras();
       }
       return params;
@@ -1063,8 +1133,8 @@
       const prompt = document.getElementById('prompt').value.trim();
       if (!prompt) { setStatus('Please enter a prompt.', 'error'); return; }
       const workflowType = document.getElementById('workflowType').value;
-      if (workflowType === 'qwen2511' && !uploadedImageBase64) {
-        setStatus('Please upload an input image for image edit.', 'error'); return;
+      if (workflowType === 'qwen2511' && !uploadedImages[0]) {
+        setStatus('Please upload at least one input image for image edit.', 'error'); return;
       }
 
       const params = buildJobParams();
@@ -1181,21 +1251,18 @@
 
     // Drag-and-drop and paste for image upload
     (function () {
-      const zone = document.getElementById('imageDropZone');
-
-      zone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        zone.classList.add('drag-over');
-      });
-      zone.addEventListener('dragleave', (e) => {
-        if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over');
-      });
-      zone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        zone.classList.remove('drag-over');
-        const file = e.dataTransfer.files[0];
-        if (file && file.type.startsWith('image/')) handleImageFile(file, file.name);
-      });
+      for (let i = 0; i < 3; i++) {
+        const zone = document.getElementById(`imgDropZone${i}`);
+        const idx = i; // capture
+        zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
+        zone.addEventListener('dragleave', (e) => { if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over'); });
+        zone.addEventListener('drop', (e) => {
+          e.preventDefault();
+          zone.classList.remove('drag-over');
+          const file = e.dataTransfer.files[0];
+          if (file && file.type.startsWith('image/')) handleImageFile(idx, file, file.name);
+        });
+      }
 
       document.addEventListener('paste', (e) => {
         if (document.getElementById('imageUploadSection').style.display === 'none') return;
@@ -1203,7 +1270,10 @@
         if (!item) return;
         e.preventDefault();
         const blob = item.getAsFile();
-        if (blob) handleImageFile(blob, 'Pasted image');
+        if (!blob) return;
+        // Paste into the first empty slot; wrap to slot 0 if all are filled
+        const target = uploadedImages.findIndex(img => img === null);
+        handleImageFile(target === -1 ? 0 : target, blob, 'Pasted image');
       });
     })();
 
