@@ -1795,7 +1795,7 @@
       const entry = sourceEntries.find(e => e.id === entryId);
       if (!entry) return;
       try {
-        await fetch(`/api/libraries/${targetLibId}/entries`, {
+        const res = await fetch(`/api/libraries/${targetLibId}/entries`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1809,6 +1809,9 @@
             timestamp: entry.timestamp,
           }),
         });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        expandedLibraries.add(targetLibId); // ensure result is visible
         await refreshLibraries();
         setStatus('Added to library', 'success');
       } catch (err) { console.warn('Add to library failed:', err); }
