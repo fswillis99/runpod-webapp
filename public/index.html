@@ -506,11 +506,23 @@
       border-left: 1px solid #1e1e1e;
     }
 
+    .hm-top-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
     .hm-counter {
       font-size: 0.7rem;
       color: #444;
       letter-spacing: 0.05em;
     }
+    .hm-select-label {
+      display: flex; align-items: center; gap: 0.35rem;
+      font-size: 0.72rem; color: #555; cursor: pointer;
+      transition: color 0.15s;
+    }
+    .hm-select-label:hover { color: #aaa; }
+    .hm-select-label input[type="checkbox"] { accent-color: #6366f1; cursor: pointer; width: 14px; height: 14px; }
 
     .hm-prompt {
       font-size: 0.88rem;
@@ -780,7 +792,13 @@
         <img id="hmImage" src="" alt="" />
       </div>
       <div class="hm-panel">
-        <div class="hm-counter" id="hmCounter"></div>
+        <div class="hm-top-row">
+          <div class="hm-counter" id="hmCounter"></div>
+          <label class="hm-select-label">
+            <input type="checkbox" id="hmSelectCb" onchange="toggleModalSelection(this.checked)" />
+            Select
+          </label>
+        </div>
         <div class="hm-prompt" id="hmPrompt"></div>
         <div class="hm-negative" id="hmNegative"></div>
         <div class="hm-loras" id="hmLoras"></div>
@@ -1165,6 +1183,13 @@
 
       document.getElementById('hmPrev').disabled = historyModalIndex === 0;
       document.getElementById('hmNext').disabled = historyModalIndex === total - 1;
+      document.getElementById('hmSelectCb').checked = selectedHistoryIds.has(e.id);
+    }
+
+    function toggleModalSelection(checked) {
+      const e = historyEntries[historyModalIndex];
+      if (!e) return;
+      toggleHistorySelect(e.id, checked);
     }
 
     function useHistoryModalEntry() {
