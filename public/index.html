@@ -1261,7 +1261,7 @@
       if (!lib) return;
       const idx = (lib.entries || []).findIndex(e => e.id === entryId);
       if (idx === -1) return;
-      modalCtx = { entries: lib.entries, index: idx, imgBase: `/images/lib/${libId}/`, libId };
+      modalCtx = { entries: lib.entries, index: idx, imgBase: `/images/lib/${lib.slug || libId}/`, libId };
       renderModal();
       document.getElementById('hmOverlay').style.display = 'flex';
       document.addEventListener('keydown', onHistoryModalKey);
@@ -1497,7 +1497,7 @@
       container.innerHTML = libraries.map(lib => {
         const entries = lib.entries || [];
         const expanded = expandedLibraries.has(lib.id);
-        const imgBase = `/images/lib/${lib.id}/`;
+        const imgBase = `/images/lib/${lib.slug || lib.id}/`;
         const sel = getLibSel(lib.id);
         const selCount = sel.size;
         const total = entries.length;

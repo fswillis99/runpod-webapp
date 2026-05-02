@@ -224,25 +224,42 @@ function loadLibraries() {
 }
 function saveLibraries(libs) { fs.writeFileSync(LIBRARIES_FILE, JSON.stringify(libs)); }
 
+// Derive a safe cross-platform directory name from a library name.
+// Keeps only alphanumerics and hyphens, collapses runs, trims ends.
+function nameToSlug(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50) || "library";
+}
+
+// Resolve the filesystem directory for a library, with fallback for
+// legacy libraries created before slugs were introduced.
+function libDir(lib) {
+  return path.join(LIB_DIR, lib.slug || String(lib.id));
+}
+
 app.get("/api/libraries", (req, res) => res.json(loadLibraries()));
 
 app.post("/api/libraries", (req, res) => {
   const name = (req.body.name || "").trim();
   if (!name) return res.status(400).json({ error: "name required" });
   const id = Date.now();
-  fs.mkdirSync(path.join(LIB_DIR, String(id)), { recursive: true });
+  // Append 4 random digits to guarantee uniqueness even for identical names.
+  let slug;
+  do {
+    slug = nameToSlug(name) + "-" + String(Math.floor(1000 + Math.random() * 9000));
+  } while (fs.existsSync(path.join(LIB_DIR, slug)));
+  fs.mkdirSync(path.join(LIB_DIR, slug), { recursive: true });
   const libs = loadLibraries();
-  libs.push({ id, name, entries: [] });
+  libs.push({ id, name, slug, entries: [] });
   saveLibraries(libs);
-  res.json({ id, name });
+  res.json({ id, name, slug });
 });
 
 app.delete("/api/libraries/:id", (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const libs = loadLibraries().filter(l => l.id !== id);
-  saveLibraries(libs);
-  const dir = path.join(LIB_DIR, String(id));
-  if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+  const libs = loadLibraries();
+  const lib = libs.find(l => l.id === id);
+  saveLibraries(libs.filter(l => l.id !== id));
+  if (lib) { const dir = libDir(lib); if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true }); }
   res.json({ ok: true });
 });
 
@@ -255,8 +272,9 @@ app.post("/api/libraries/:id/entries", (req, res) => {
   if (!lib) return res.status(404).json({ error: "library not found" });
 
   const { filename, input_images, source_lib_id, prompt, negative_prompt, workflow_type, loras, timestamp } = req.body;
-  const srcDir = source_lib_id ? path.join(LIB_DIR, String(source_lib_id)) : IMAGES_DIR;
-  const dstDir = path.join(LIB_DIR, String(libId));
+  const srcLib = source_lib_id ? libs.find(l => l.id === source_lib_id) : null;
+  const srcDir = srcLib ? libDir(srcLib) : IMAGES_DIR;
+  const dstDir = libDir(lib);
   fs.mkdirSync(dstDir, { recursive: true });
 
   const safeCopy = (fname) => {
@@ -288,7 +306,7 @@ app.delete("/api/libraries/:libId/entries/:entryId", (req, res) => {
   const entry = (lib.entries || []).find(e => e.id === entryId);
   lib.entries = (lib.entries || []).filter(e => e.id !== entryId);
   saveLibraries(libs);
-  const dir = path.join(LIB_DIR, String(libId));
+  const dir = libDir(lib);
   if (entry?.filename) { const p = path.join(dir, entry.filename); if (fs.existsSync(p)) fs.unlinkSync(p); }
   for (const f of (entry?.input_images || [])) { const p = path.join(dir, f); if (fs.existsSync(p)) fs.unlinkSync(p); }
   res.json({ ok: true });
