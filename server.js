@@ -159,7 +159,7 @@ app.get("/api/history", (req, res) => {
 });
 
 app.post("/api/history", (req, res) => {
-  const { prompt, negative_prompt, workflow_type, loras, filename, image, timestamp } =
+  const { prompt, negative_prompt, workflow_type, loras, filename, image, input_images, timestamp } =
     req.body;
   const id = Date.now();
   if (image && filename) {
@@ -169,8 +169,26 @@ app.post("/api/history", (req, res) => {
       loras: Array.isArray(loras) ? loras.join(",") : "",
     });
   }
+  // Save each input image as a sidecar file: {outputBase}-in{n}.png
+  const savedInputFiles = [];
+  if (Array.isArray(input_images) && input_images.length > 0 && filename) {
+    const base = filename.replace(/\.[^.]+$/, "");
+    for (let i = 0; i < input_images.length; i++) {
+      const img = input_images[i];
+      if (!img?.data) continue;
+      const inputFilename = `${base}-in${i + 1}.png`;
+      try {
+        fs.writeFileSync(path.join(IMAGES_DIR, inputFilename), Buffer.from(img.data, "base64"));
+        savedInputFiles.push(inputFilename);
+      } catch (err) {
+        console.warn(`Failed to save input image ${i + 1}:`, err.message);
+      }
+    }
+  }
   const history = loadHistory();
-  history.unshift({ id, timestamp, prompt, negative_prompt, workflow_type, loras, filename });
+  const entry = { id, timestamp, prompt, negative_prompt, workflow_type, loras, filename };
+  if (savedInputFiles.length > 0) entry.input_images = savedInputFiles;
+  history.unshift(entry);
   if (history.length > MAX_HISTORY) history.splice(MAX_HISTORY);
   saveHistory(history);
   res.json({ ok: true });
@@ -185,6 +203,10 @@ app.delete("/api/history/:id", (req, res) => {
   if (entry?.filename) {
     const imgPath = path.join(IMAGES_DIR, entry.filename);
     if (fs.existsSync(imgPath)) fs.unlinkSync(imgPath);
+  }
+  for (const fname of (entry?.input_images || [])) {
+    const p = path.join(IMAGES_DIR, fname);
+    if (fs.existsSync(p)) fs.unlinkSync(p);
   }
   res.json({ ok: true });
 });
