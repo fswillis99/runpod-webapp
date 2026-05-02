@@ -514,10 +514,17 @@
     .create-library-row .btn-cancel:hover { border-color: #888; color: #aaa; }
     .library-section { margin-bottom: 2.5rem; }
     .library-section-header {
-      display: flex; align-items: center; justify-content: space-between;
-      margin-bottom: 0.75rem; padding-bottom: 0.4rem; border-bottom: 1px solid #1e1e1e;
+      display: flex; align-items: center; gap: 0.45rem;
+      margin-bottom: 0; padding: 0.45rem 0.1rem; border-bottom: 1px solid #1e1e1e;
+      cursor: pointer; user-select: none;
     }
+    .library-section-header:hover .library-section-name { color: #ccc; }
+    .lib-toggle-arrow { font-size: 0.7rem; color: #555; flex-shrink: 0; }
     .library-section-name { font-size: 0.85rem; font-weight: 600; color: #aaa; }
+    .lib-count { font-size: 0.7rem; color: #444; }
+    .lib-header-controls {
+      display: flex; align-items: center; gap: 0.65rem; margin-left: auto; flex-shrink: 0;
+    }
     .lib-delete-btn {
       font-size: 0.72rem; padding: 0.25rem 0.55rem;
       border: 1px solid #333; border-radius: 6px;
@@ -582,6 +589,9 @@
       align-items: center;
       justify-content: space-between;
       padding-right: 2rem;
+    }
+    .hm-lib-name {
+      font-size: 0.72rem; font-weight: 600; color: #6366f1; letter-spacing: 0.02em;
     }
     .hm-counter {
       font-size: 0.7rem;
@@ -871,6 +881,7 @@
             Select
           </label>
         </div>
+        <div class="hm-lib-name" id="hmLibName" style="display:none"></div>
         <div class="hm-prompt" id="hmPrompt"></div>
         <div class="hm-negative" id="hmNegative"></div>
         <div class="hm-loras" id="hmLoras"></div>
@@ -936,6 +947,12 @@
     let libraries = [];
     let selectedHistoryIds = new Set();
     let modalCtx = null; // { entries, index, imgBase, libId }
+    const expandedLibraries = new Set();
+    const selectedLibEntries = new Map(); // libId -> Set<entryId>
+    function getLibSel(libId) {
+      if (!selectedLibEntries.has(libId)) selectedLibEntries.set(libId, new Set());
+      return selectedLibEntries.get(libId);
+    }
     let uploadedImages = [null, null, null]; // each: {data: base64, name: string} | null
 
     // Queue state
@@ -1295,21 +1312,27 @@
       dl.download = e.filename || 'image.png';
       document.getElementById('hmPrev').disabled = modalCtx.index === 0;
       document.getElementById('hmNext').disabled = modalCtx.index === total - 1;
-      // Select checkbox only makes sense in history mode
-      const selRow = document.getElementById('hmSelectCb').closest('.hm-select-label');
-      if (modalCtx.libId === null) {
-        selRow.style.display = '';
-        document.getElementById('hmSelectCb').checked = selectedHistoryIds.has(e.id);
+      // Library name tag
+      const libNameEl = document.getElementById('hmLibName');
+      if (modalCtx.libId !== null) {
+        const lib = libraries.find(l => l.id === modalCtx.libId);
+        libNameEl.textContent = lib ? lib.name : '';
+        libNameEl.style.display = '';
       } else {
-        selRow.style.display = 'none';
+        libNameEl.style.display = 'none';
       }
+      // Select checkbox — works in both history and library mode
+      document.getElementById('hmSelectCb').checked = modalCtx.libId === null
+        ? selectedHistoryIds.has(e.id)
+        : getLibSel(modalCtx.libId).has(e.id);
     }
 
     function toggleModalSelection(checked) {
-      if (!modalCtx || modalCtx.libId !== null) return;
+      if (!modalCtx) return;
       const e = modalCtx.entries[modalCtx.index];
       if (!e) return;
-      toggleHistorySelect(e.id, checked);
+      if (modalCtx.libId === null) toggleHistorySelect(e.id, checked);
+      else toggleLibEntrySelect(modalCtx.libId, e.id, checked);
     }
 
     function useModalEntry() {
@@ -1328,6 +1351,7 @@
       try {
         if (modalCtx.libId !== null) {
           await fetch(`/api/libraries/${modalCtx.libId}/entries/${e.id}`, { method: 'DELETE' });
+          getLibSel(modalCtx.libId).delete(e.id);
           await refreshLibraries();
         } else {
           await fetch(`/api/history/${e.id}`, { method: 'DELETE' });
@@ -1471,24 +1495,63 @@
       if (!libraries.length) { container.innerHTML = ''; return; }
       container.innerHTML = libraries.map(lib => {
         const entries = lib.entries || [];
+        const expanded = expandedLibraries.has(lib.id);
         const imgBase = `/images/lib/${lib.id}/`;
-        const cards = entries.length
+        const sel = getLibSel(lib.id);
+        const selCount = sel.size;
+        const total = entries.length;
+        const cards = total
           ? entries.map(e => renderLibraryCard(e, lib.id, imgBase)).join('')
           : '<div class="library-empty">No images yet.</div>';
         return `
           <div class="library-section">
-            <div class="library-section-header">
+            <div class="library-section-header" onclick="toggleLibraryCollapse(${lib.id})">
+              <span class="lib-toggle-arrow" id="libArrow-${lib.id}">${expanded ? '▾' : '▸'}</span>
               <span class="library-section-name">${escapeHtml(lib.name)}</span>
-              <button class="lib-delete-btn" onclick="deleteLibrary(${lib.id})">Delete Library</button>
+              <span class="lib-count">${total}</span>
+              <div class="lib-header-controls" onclick="event.stopPropagation()">
+                <label class="history-select-all-label">
+                  <input type="checkbox" id="libSelectAll-${lib.id}"
+                         onchange="onLibSelectAllChange(${lib.id})" />
+                  All
+                </label>
+                <button class="lib-delete-btn" onclick="deleteLibrary(${lib.id})">Delete</button>
+              </div>
             </div>
-            <div class="history-group-cards">${cards}</div>
+            <div class="bulk-actions-bar" id="libBulkBar-${lib.id}" style="display:none">
+              <span class="bulk-count" id="libBulkCount-${lib.id}"></span>
+              <button class="bulk-btn" onclick="libBulkDownload(${lib.id})">Download</button>
+              <button class="bulk-btn" onclick="libBulkExportPrompts(${lib.id})">Export Prompts</button>
+              <button class="bulk-btn addlib-btn" onclick="libBulkCopyToLib(event,${lib.id})">Copy to…</button>
+              <button class="bulk-btn bulk-btn-danger" onclick="libBulkDelete(${lib.id})">Delete</button>
+              <span class="bulk-spacer"></span>
+              <button class="bulk-btn" onclick="clearLibSelection(${lib.id})">Clear</button>
+            </div>
+            <div class="history-group-cards" id="libCards-${lib.id}" style="${expanded ? '' : 'display:none'}">
+              ${cards}
+            </div>
           </div>`;
       }).join('');
+      // indeterminate can't be set in HTML, restore after render
+      libraries.forEach(lib => {
+        const cb = document.getElementById(`libSelectAll-${lib.id}`);
+        if (!cb) return;
+        const sel = getLibSel(lib.id);
+        const total = (lib.entries || []).length;
+        if (sel.size === 0) { cb.checked = false; cb.indeterminate = false; }
+        else if (sel.size === total) { cb.checked = true; cb.indeterminate = false; }
+        else { cb.checked = false; cb.indeterminate = true; }
+        updateLibSelectionUI(lib.id); // sync bulk bar visibility
+      });
     }
 
     function renderLibraryCard(e, libId, imgBase) {
+      const sel = getLibSel(libId).has(e.id);
       return `
-        <div class="history-card" onclick="openLibModal(${libId}, ${e.id})">
+        <div class="history-card lib-card${sel ? ' selected' : ''}" data-lib="${libId}" data-id="${e.id}" onclick="openLibModal(${libId}, ${e.id})">
+          <label class="history-cb-wrap" onclick="event.stopPropagation()">
+            <input type="checkbox" ${sel ? 'checked' : ''} onchange="toggleLibEntrySelect(${libId}, ${e.id}, this.checked)" />
+          </label>
           <img class="history-thumb" src="${imgBase}${escapeHtml(e.filename || '')}" alt="" />
           <div class="history-meta">
             <div class="history-prompt">${escapeHtml(e.prompt || '')}</div>
@@ -1506,10 +1569,136 @@
         </div>`;
     }
 
+    function toggleLibraryCollapse(libId) {
+      if (expandedLibraries.has(libId)) expandedLibraries.delete(libId);
+      else expandedLibraries.add(libId);
+      const expanded = expandedLibraries.has(libId);
+      const cardsEl = document.getElementById(`libCards-${libId}`);
+      const arrowEl = document.getElementById(`libArrow-${libId}`);
+      if (cardsEl) cardsEl.style.display = expanded ? '' : 'none';
+      if (arrowEl) arrowEl.textContent = expanded ? '▾' : '▸';
+    }
+
+    function toggleLibEntrySelect(libId, entryId, checked) {
+      const sel = getLibSel(libId);
+      if (checked) sel.add(entryId); else sel.delete(entryId);
+      const card = document.querySelector(`.lib-card[data-lib="${libId}"][data-id="${entryId}"]`);
+      if (card) {
+        card.classList.toggle('selected', checked);
+        const box = card.querySelector('input[type="checkbox"]');
+        if (box) box.checked = checked;
+      }
+      updateLibSelectionUI(libId);
+    }
+
+    function onLibSelectAllChange(libId) {
+      const cb = document.getElementById(`libSelectAll-${libId}`);
+      const lib = libraries.find(l => l.id === libId);
+      if (!lib || !cb) return;
+      const sel = getLibSel(libId);
+      if (cb.checked) (lib.entries || []).forEach(e => sel.add(e.id));
+      else sel.clear();
+      document.querySelectorAll(`.lib-card[data-lib="${libId}"]`).forEach(card => {
+        const eid = parseInt(card.dataset.id, 10);
+        const s = sel.has(eid);
+        card.classList.toggle('selected', s);
+        const box = card.querySelector('input[type="checkbox"]');
+        if (box) box.checked = s;
+      });
+      updateLibSelectionUI(libId);
+    }
+
+    function clearLibSelection(libId) {
+      getLibSel(libId).clear();
+      document.querySelectorAll(`.lib-card[data-lib="${libId}"]`).forEach(card => {
+        card.classList.remove('selected');
+        const box = card.querySelector('input[type="checkbox"]');
+        if (box) box.checked = false;
+      });
+      updateLibSelectionUI(libId);
+    }
+
+    function updateLibSelectionUI(libId) {
+      const sel = getLibSel(libId);
+      const lib = libraries.find(l => l.id === libId);
+      const total = lib ? (lib.entries || []).length : 0;
+      const count = sel.size;
+      const bar = document.getElementById(`libBulkBar-${libId}`);
+      const countEl = document.getElementById(`libBulkCount-${libId}`);
+      const cbAll = document.getElementById(`libSelectAll-${libId}`);
+      if (bar) bar.style.display = count > 0 ? 'flex' : 'none';
+      if (countEl) countEl.textContent = `${count} selected`;
+      if (cbAll) {
+        if (count === 0) { cbAll.checked = false; cbAll.indeterminate = false; }
+        else if (count === total) { cbAll.checked = true; cbAll.indeterminate = false; }
+        else { cbAll.checked = false; cbAll.indeterminate = true; }
+      }
+    }
+
+    async function libBulkDelete(libId) {
+      const sel = getLibSel(libId);
+      if (!sel.size) return;
+      if (!confirm(`Remove ${sel.size} selected entr${sel.size === 1 ? 'y' : 'ies'} from library?`)) return;
+      for (const id of [...sel]) {
+        try { await fetch(`/api/libraries/${libId}/entries/${id}`, { method: 'DELETE' }); }
+        catch (err) { console.warn('Bulk lib delete error:', err); }
+      }
+      sel.clear();
+      await refreshLibraries();
+    }
+
+    async function libBulkDownload(libId) {
+      const lib = libraries.find(l => l.id === libId);
+      if (!lib) return;
+      const sel = getLibSel(libId);
+      const entries = (lib.entries || []).filter(e => sel.has(e.id));
+      const imgBase = `/images/lib/${libId}/`;
+      for (const entry of entries) {
+        const a = document.createElement('a');
+        a.href = `${imgBase}${entry.filename}`; a.download = entry.filename;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        await new Promise(r => setTimeout(r, 150));
+      }
+    }
+
+    function libBulkExportPrompts(libId) {
+      const lib = libraries.find(l => l.id === libId);
+      if (!lib) return;
+      const sel = getLibSel(libId);
+      const entries = (lib.entries || []).filter(e => sel.has(e.id));
+      const seen = new Set();
+      const lines = [];
+      for (const e of entries) {
+        const p = (e.prompt || '').trim();
+        if (p && !seen.has(p)) { seen.add(p); lines.push(p); }
+      }
+      if (!lines.length) return;
+      const blob = new Blob([lines.join('\n\n')], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const now = new Date();
+      const pad = (n, w = 2) => String(n).padStart(w, '0');
+      const stamp = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+      const a = document.createElement('a');
+      a.href = url; a.download = `prompts-${stamp}.txt`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function libBulkCopyToLib(event, sourceLibId) {
+      showLibPicker(event, async (targetLibId) => {
+        const lib = libraries.find(l => l.id === sourceLibId);
+        if (!lib) return;
+        const sel = getLibSel(sourceLibId);
+        const entries = (lib.entries || []).filter(e => sel.has(e.id));
+        for (const e of entries) await addEntryToLibrary(e.id, sourceLibId, targetLibId);
+      }, sourceLibId);
+    }
+
     async function deleteLibraryEntry(libId, entryId) {
       if (!confirm('Remove this entry from the library?')) return;
       try {
         await fetch(`/api/libraries/${libId}/entries/${entryId}`, { method: 'DELETE' });
+        getLibSel(libId).delete(entryId);
         await refreshLibraries();
       } catch (err) { console.warn('Library entry delete failed:', err); }
     }
