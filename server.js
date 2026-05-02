@@ -288,10 +288,14 @@ app.post("/api/libraries/:id/entries", (req, res) => {
   safeCopy(filename);
   const copiedInputs = (input_images || []).filter(safeCopy);
 
+  lib.entries = lib.entries || [];
+  if (filename && lib.entries.some(e => e.filename === filename)) {
+    return res.status(409).json({ error: 'duplicate' });
+  }
+
   const entryId = Date.now();
   const entry = { id: entryId, timestamp: timestamp || new Date().toISOString(), filename, prompt, negative_prompt, workflow_type, loras };
   if (copiedInputs.length) entry.input_images = copiedInputs;
-  lib.entries = lib.entries || [];
   lib.entries.unshift(entry);
   saveLibraries(libs);
   res.json({ ok: true, entryId });
