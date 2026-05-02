@@ -304,9 +304,57 @@
       color: #555;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      margin-bottom: 1rem;
+      margin-bottom: 0.75rem;
       padding-bottom: 0.6rem;
       border-bottom: 1px solid #222;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .history-header-controls { display: flex; align-items: center; gap: 0.75rem; }
+    .history-select-all-label {
+      display: flex; align-items: center; gap: 0.35rem;
+      font-size: 0.72rem; font-weight: 500; color: #555;
+      cursor: pointer; text-transform: none; letter-spacing: 0;
+      transition: color 0.15s;
+    }
+    .history-select-all-label:hover { color: #999; }
+    .history-select-all-label input[type="checkbox"] { accent-color: #6366f1; cursor: pointer; }
+
+    .bulk-actions-bar {
+      display: none;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      padding: 0.5rem 0.75rem;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      margin-bottom: 0.75rem;
+    }
+    .bulk-count { font-size: 0.8rem; color: #777; flex-shrink: 0; }
+    .bulk-spacer { flex: 1; }
+    .bulk-btn {
+      padding: 0.3rem 0.65rem;
+      border: 1px solid #333;
+      border-radius: 6px;
+      background: transparent;
+      color: #888;
+      font-size: 0.76rem;
+      cursor: pointer;
+      width: auto;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .bulk-btn:hover { border-color: #6366f1; color: #fff; }
+    .bulk-btn-danger:hover { border-color: #cc2233; color: #cc2233; }
+
+    .history-card.selected { border-color: #6366f1; background: rgba(99,102,241,0.05); }
+    .history-cb-wrap {
+      flex-shrink: 0; display: flex; align-items: center; padding-right: 0.1rem;
+    }
+    .history-cb-wrap input[type="checkbox"] {
+      width: 15px; height: 15px; accent-color: #6366f1; cursor: pointer;
     }
 
     .history-list { display: flex; flex-direction: column; gap: 1.25rem; }
@@ -750,7 +798,23 @@
 
   <!-- History -->
   <div class="history-section">
-    <div class="history-header">History</div>
+    <div class="history-header">
+      <span>History</span>
+      <div class="history-header-controls">
+        <label class="history-select-all-label">
+          <input type="checkbox" id="historySelectAllCb" onchange="onSelectAllChange()" />
+          Select all
+        </label>
+      </div>
+    </div>
+    <div class="bulk-actions-bar" id="bulkActionsBar">
+      <span class="bulk-count" id="bulkCount"></span>
+      <button class="bulk-btn" onclick="bulkDownload()">Download</button>
+      <button class="bulk-btn" onclick="bulkExportPrompts()">Export Prompts</button>
+      <button class="bulk-btn bulk-btn-danger" onclick="bulkDelete()">Delete</button>
+      <span class="bulk-spacer"></span>
+      <button class="bulk-btn" onclick="clearSelection()">Clear</button>
+    </div>
     <div class="history-list" id="historyList">
       <div class="history-empty">No history yet.</div>
     </div>
@@ -759,6 +823,7 @@
   <script>
     const POLL_INTERVAL_MS = 2000;
     let historyEntries = [];
+    let selectedHistoryIds = new Set();
     let uploadedImages = [null, null, null]; // each: {data: base64, name: string} | null
 
     // Queue state
@@ -965,8 +1030,12 @@
     }
 
     function renderHistoryCard(e) {
+      const sel = selectedHistoryIds.has(e.id);
       return `
-        <div class="history-card" onclick="openHistoryModal(${e.id})">
+        <div class="history-card${sel ? ' selected' : ''}" data-id="${e.id}" onclick="openHistoryModal(${e.id})">
+          <label class="history-cb-wrap" onclick="event.stopPropagation()">
+            <input type="checkbox" ${sel ? 'checked' : ''} onchange="toggleHistorySelect(${e.id}, this.checked)" />
+          </label>
           <img class="history-thumb" src="/images/${escapeHtml(e.filename || '')}" alt="" />
           <div class="history-meta">
             <div class="history-prompt">${escapeHtml(e.prompt)}</div>
@@ -1010,6 +1079,7 @@
             <div class="history-group-cards">${g.entries.map(renderHistoryCard).join('')}</div>
           </div>
         `).join('');
+        updateSelectionUI();
       } catch (err) {
         console.warn('History load failed:', err);
       }
@@ -1032,6 +1102,7 @@
       if (!confirm('Delete this history entry?')) return;
       try {
         await fetch(`/api/history/${id}`, { method: 'DELETE' });
+        selectedHistoryIds.delete(id);
         await refreshHistory();
       } catch (err) {
         console.warn('History delete failed:', err);
@@ -1109,6 +1180,7 @@
       if (!confirm('Delete this history entry?')) return;
       try {
         await fetch(`/api/history/${e.id}`, { method: 'DELETE' });
+        selectedHistoryIds.delete(e.id);
         await refreshHistory();
         // Navigate to next entry if possible, else previous, else close
         if (historyEntries.length === 0) {
@@ -1120,6 +1192,104 @@
       } catch (err) {
         console.warn('History delete failed:', err);
       }
+    }
+
+    // ── Multi-select ───────────────────────────────────────────────────────────
+
+    function toggleHistorySelect(id, checked) {
+      if (checked) selectedHistoryIds.add(id);
+      else selectedHistoryIds.delete(id);
+      const card = document.querySelector(`.history-card[data-id="${id}"]`);
+      if (card) card.classList.toggle('selected', checked);
+      updateSelectionUI();
+    }
+
+    function onSelectAllChange() {
+      const cb = document.getElementById('historySelectAllCb');
+      if (cb.checked) {
+        historyEntries.forEach(e => selectedHistoryIds.add(e.id));
+      } else {
+        selectedHistoryIds.clear();
+      }
+      document.querySelectorAll('.history-card').forEach(card => {
+        const id = parseInt(card.dataset.id, 10);
+        const sel = selectedHistoryIds.has(id);
+        card.classList.toggle('selected', sel);
+        const box = card.querySelector('input[type="checkbox"]');
+        if (box) box.checked = sel;
+      });
+      updateSelectionUI();
+    }
+
+    function clearSelection() {
+      selectedHistoryIds.clear();
+      document.querySelectorAll('.history-card').forEach(card => {
+        card.classList.remove('selected');
+        const box = card.querySelector('input[type="checkbox"]');
+        if (box) box.checked = false;
+      });
+      updateSelectionUI();
+    }
+
+    function updateSelectionUI() {
+      const count = selectedHistoryIds.size;
+      const total = historyEntries.length;
+      const bar = document.getElementById('bulkActionsBar');
+      const countEl = document.getElementById('bulkCount');
+      const selectAllCb = document.getElementById('historySelectAllCb');
+      bar.style.display = count > 0 ? 'flex' : 'none';
+      countEl.textContent = `${count} selected`;
+      if (count === 0) {
+        selectAllCb.checked = false;
+        selectAllCb.indeterminate = false;
+      } else if (count === total) {
+        selectAllCb.checked = true;
+        selectAllCb.indeterminate = false;
+      } else {
+        selectAllCb.checked = false;
+        selectAllCb.indeterminate = true;
+      }
+    }
+
+    async function bulkDelete() {
+      if (!selectedHistoryIds.size) return;
+      if (!confirm(`Delete ${selectedHistoryIds.size} selected entr${selectedHistoryIds.size === 1 ? 'y' : 'ies'}?`)) return;
+      for (const id of [...selectedHistoryIds]) {
+        try { await fetch(`/api/history/${id}`, { method: 'DELETE' }); }
+        catch (err) { console.warn('Bulk delete error:', err); }
+      }
+      selectedHistoryIds.clear();
+      await refreshHistory();
+    }
+
+    async function bulkDownload() {
+      const entries = historyEntries.filter(e => selectedHistoryIds.has(e.id));
+      for (const entry of entries) {
+        const a = document.createElement('a');
+        a.href = `/images/${entry.filename}`;
+        a.download = entry.filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        await new Promise(r => setTimeout(r, 150));
+      }
+    }
+
+    function bulkExportPrompts() {
+      const entries = historyEntries.filter(e => selectedHistoryIds.has(e.id));
+      const seen = new Set();
+      const lines = [];
+      for (const e of entries) {
+        const p = (e.prompt || '').trim();
+        if (p && !seen.has(p)) { seen.add(p); lines.push(p); }
+      }
+      if (!lines.length) return;
+      const blob = new Blob([lines.join('\n\n')], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'prompts.txt';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
     // Snapshot current form values into a job params object.
