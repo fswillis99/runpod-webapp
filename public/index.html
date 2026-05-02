@@ -1749,8 +1749,8 @@
         ? available.map(l => `<div class="lib-picker-item" onclick="selectLibFromPicker(${l.id})">${escapeHtml(l.name)}</div>`).join('')
         : '<div class="lib-picker-empty">No libraries yet — create one first.</div>';
       const rect = event.currentTarget.getBoundingClientRect();
-      picker.style.top = `${rect.bottom + window.scrollY + 4}px`;
-      picker.style.left = `${rect.left + window.scrollX}px`;
+      picker.style.top = `${rect.bottom + 4}px`;
+      picker.style.left = `${rect.left}px`;
       picker.style.display = 'block';
     }
 
