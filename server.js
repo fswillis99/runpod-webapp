@@ -13,6 +13,8 @@ app.use(express.static("public"));
 // ---------------------------------------------------------------------------
 const IMAGES_DIR = path.join(__dirname, "images");
 if (!fs.existsSync(IMAGES_DIR)) fs.mkdirSync(IMAGES_DIR);
+const LIB_DIR = path.join(IMAGES_DIR, "lib");
+if (!fs.existsSync(LIB_DIR)) fs.mkdirSync(LIB_DIR);
 app.use("/images", express.static(IMAGES_DIR));
 
 // CRC32 implementation for PNG chunk checksums
@@ -208,6 +210,87 @@ app.delete("/api/history/:id", (req, res) => {
     const p = path.join(IMAGES_DIR, fname);
     if (fs.existsSync(p)) fs.unlinkSync(p);
   }
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Libraries
+// ---------------------------------------------------------------------------
+const LIBRARIES_FILE = path.join(__dirname, "libraries.json");
+
+function loadLibraries() {
+  try { return JSON.parse(fs.readFileSync(LIBRARIES_FILE, "utf8")); }
+  catch { return []; }
+}
+function saveLibraries(libs) { fs.writeFileSync(LIBRARIES_FILE, JSON.stringify(libs)); }
+
+app.get("/api/libraries", (req, res) => res.json(loadLibraries()));
+
+app.post("/api/libraries", (req, res) => {
+  const name = (req.body.name || "").trim();
+  if (!name) return res.status(400).json({ error: "name required" });
+  const id = Date.now();
+  fs.mkdirSync(path.join(LIB_DIR, String(id)), { recursive: true });
+  const libs = loadLibraries();
+  libs.push({ id, name, entries: [] });
+  saveLibraries(libs);
+  res.json({ id, name });
+});
+
+app.delete("/api/libraries/:id", (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const libs = loadLibraries().filter(l => l.id !== id);
+  saveLibraries(libs);
+  const dir = path.join(LIB_DIR, String(id));
+  if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+  res.json({ ok: true });
+});
+
+// Add an entry to a library — copies image files from source into the library dir.
+// source_lib_id: null = history images dir, or a library id.
+app.post("/api/libraries/:id/entries", (req, res) => {
+  const libId = parseInt(req.params.id, 10);
+  const libs = loadLibraries();
+  const lib = libs.find(l => l.id === libId);
+  if (!lib) return res.status(404).json({ error: "library not found" });
+
+  const { filename, input_images, source_lib_id, prompt, negative_prompt, workflow_type, loras, timestamp } = req.body;
+  const srcDir = source_lib_id ? path.join(LIB_DIR, String(source_lib_id)) : IMAGES_DIR;
+  const dstDir = path.join(LIB_DIR, String(libId));
+  fs.mkdirSync(dstDir, { recursive: true });
+
+  const safeCopy = (fname) => {
+    if (!fname) return false;
+    const src = path.join(srcDir, fname);
+    const dst = path.join(dstDir, fname);
+    if (fs.existsSync(src) && !fs.existsSync(dst)) fs.copyFileSync(src, dst);
+    return fs.existsSync(dst);
+  };
+
+  safeCopy(filename);
+  const copiedInputs = (input_images || []).filter(safeCopy);
+
+  const entryId = Date.now();
+  const entry = { id: entryId, timestamp: timestamp || new Date().toISOString(), filename, prompt, negative_prompt, workflow_type, loras };
+  if (copiedInputs.length) entry.input_images = copiedInputs;
+  lib.entries = lib.entries || [];
+  lib.entries.unshift(entry);
+  saveLibraries(libs);
+  res.json({ ok: true, entryId });
+});
+
+app.delete("/api/libraries/:libId/entries/:entryId", (req, res) => {
+  const libId = parseInt(req.params.libId, 10);
+  const entryId = parseInt(req.params.entryId, 10);
+  const libs = loadLibraries();
+  const lib = libs.find(l => l.id === libId);
+  if (!lib) return res.status(404).json({ error: "library not found" });
+  const entry = (lib.entries || []).find(e => e.id === entryId);
+  lib.entries = (lib.entries || []).filter(e => e.id !== entryId);
+  saveLibraries(libs);
+  const dir = path.join(LIB_DIR, String(libId));
+  if (entry?.filename) { const p = path.join(dir, entry.filename); if (fs.existsSync(p)) fs.unlinkSync(p); }
+  for (const f of (entry?.input_images || [])) { const p = path.join(dir, f); if (fs.existsSync(p)) fs.unlinkSync(p); }
   res.json({ ok: true });
 });
 

@@ -456,6 +456,77 @@
 
     .history-empty { color: #333; font-size: 0.85rem; padding: 0.5rem 0; }
 
+    /* ── Add-to-library button (cards + modal) ── */
+    .addlib-btn {
+      display: inline-block; padding: 0.35rem 0.7rem;
+      border: 1px solid #333; border-radius: 6px;
+      background: transparent; color: #777; font-size: 0.75rem;
+      cursor: pointer; white-space: nowrap; width: auto;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .addlib-btn:hover { border-color: #6366f1; color: #fff; }
+
+    /* ── Library picker dropdown ── */
+    .lib-picker {
+      position: fixed; z-index: 3000;
+      background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 8px;
+      padding: 0.35rem 0; min-width: 160px;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.55);
+    }
+    .lib-picker-item {
+      padding: 0.45rem 0.9rem; font-size: 0.82rem; color: #aaa;
+      cursor: pointer; white-space: nowrap;
+    }
+    .lib-picker-item:hover { background: #252525; color: #fff; }
+    .lib-picker-empty { padding: 0.5rem 0.9rem; font-size: 0.78rem; color: #555; }
+
+    /* ── Libraries section ── */
+    .libraries-section { width: 100%; max-width: 1100px; margin-top: 3rem; }
+    .libraries-header {
+      font-size: 0.75rem; font-weight: 600; color: #555;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      margin-bottom: 0.75rem; padding-bottom: 0.6rem;
+      border-bottom: 1px solid #222;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .new-lib-btn {
+      font-size: 0.72rem; font-weight: 500; text-transform: none; letter-spacing: 0;
+      padding: 0.28rem 0.65rem; border: 1px solid #333; border-radius: 6px;
+      background: transparent; color: #666; cursor: pointer; width: auto;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .new-lib-btn:hover { border-color: #6366f1; color: #fff; }
+    .create-library-row {
+      display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem;
+    }
+    .create-library-row input {
+      flex: 1; min-width: 0; background: #1a1a1a; border: 1px solid #333;
+      border-radius: 8px; color: #e0e0e0; font-size: 0.9rem;
+      padding: 0.5rem 0.75rem; outline: none; transition: border-color 0.2s;
+    }
+    .create-library-row input:focus { border-color: #6366f1; }
+    .create-library-row .btn-create { width: auto; padding: 0.5rem 0.9rem; font-size: 0.85rem; }
+    .create-library-row .btn-cancel {
+      width: auto; padding: 0.5rem 0.9rem; font-size: 0.85rem;
+      background: transparent; border: 1px solid #333; color: #666;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .create-library-row .btn-cancel:hover { border-color: #888; color: #aaa; }
+    .library-section { margin-bottom: 2.5rem; }
+    .library-section-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 0.75rem; padding-bottom: 0.4rem; border-bottom: 1px solid #1e1e1e;
+    }
+    .library-section-name { font-size: 0.85rem; font-weight: 600; color: #aaa; }
+    .lib-delete-btn {
+      font-size: 0.72rem; padding: 0.25rem 0.55rem;
+      border: 1px solid #333; border-radius: 6px;
+      background: transparent; color: #555; cursor: pointer; width: auto;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .lib-delete-btn:hover { border-color: #cc2233; color: #cc2233; }
+    .library-empty { color: #333; font-size: 0.85rem; padding: 0.5rem 0; }
+
     /* ── History lightbox modal ── */
     .hm-overlay {
       position: fixed;
@@ -786,8 +857,8 @@
   <!-- History lightbox modal -->
   <div id="hmOverlay" class="hm-overlay" style="display:none" onclick="closeHistoryModal()">
     <div class="hm-box" onclick="event.stopPropagation()">
-      <button class="hm-nav hm-prev" id="hmPrev" onclick="navigateHistoryModal(-1)">&#8249;</button>
-      <button class="hm-nav hm-next" id="hmNext" onclick="navigateHistoryModal(1)">&#8250;</button>
+      <button class="hm-nav hm-prev" id="hmPrev" onclick="navigateModal(-1)">&#8249;</button>
+      <button class="hm-nav hm-next" id="hmNext" onclick="navigateModal(1)">&#8250;</button>
       <button class="hm-close" onclick="closeHistoryModal()">&#x2715;</button>
       <div class="hm-img-wrap">
         <img id="hmImage" src="" alt="" />
@@ -807,9 +878,10 @@
         <div class="hm-spacer"></div>
         <div class="hm-filename" id="hmFilename"></div>
         <div class="hm-actions">
-          <button class="hm-btn hm-btn-primary" onclick="useHistoryModalEntry()">Use in form</button>
+          <button class="hm-btn hm-btn-primary" onclick="useModalEntry()">Use in form</button>
           <a class="hm-btn" id="hmDownload" download="">Download</a>
-          <button class="hm-btn hm-btn-danger" onclick="deleteHistoryModalEntry()">Delete</button>
+          <button class="hm-btn addlib-btn" onclick="openLibPickerForModal(event)">+ Library</button>
+          <button class="hm-btn hm-btn-danger" onclick="deleteModalEntry()">Delete</button>
         </div>
       </div>
     </div>
@@ -830,6 +902,7 @@
       <span class="bulk-count" id="bulkCount"></span>
       <button class="bulk-btn" onclick="bulkDownload()">Download</button>
       <button class="bulk-btn" onclick="bulkExportPrompts()">Export Prompts</button>
+      <button class="bulk-btn addlib-btn" onclick="openLibPickerForBulk(event)">+ Library</button>
       <button class="bulk-btn bulk-btn-danger" onclick="bulkDelete()">Delete</button>
       <span class="bulk-spacer"></span>
       <button class="bulk-btn" onclick="clearSelection()">Clear</button>
@@ -839,10 +912,30 @@
     </div>
   </div>
 
+  <!-- Libraries -->
+  <div class="libraries-section">
+    <div class="libraries-header">
+      <span>Libraries</span>
+      <button class="new-lib-btn" onclick="showCreateLibraryForm()">+ New Library</button>
+    </div>
+    <div class="create-library-row" id="createLibraryRow" style="display:none">
+      <input type="text" id="newLibraryNameInput" placeholder="Library name…"
+             onkeydown="if(event.key==='Enter')submitCreateLibrary();else if(event.key==='Escape')hideCreateLibraryForm()" />
+      <button class="btn-create" onclick="submitCreateLibrary()">Create</button>
+      <button class="btn-cancel" onclick="hideCreateLibraryForm()">Cancel</button>
+    </div>
+    <div id="libraryList"></div>
+  </div>
+
+  <!-- Shared library picker dropdown -->
+  <div id="libPickerDropdown" class="lib-picker" style="display:none"></div>
+
   <script>
     const POLL_INTERVAL_MS = 2000;
     let historyEntries = [];
+    let libraries = [];
     let selectedHistoryIds = new Set();
+    let modalCtx = null; // { entries, index, imgBase, libId }
     let uploadedImages = [null, null, null]; // each: {data: base64, name: string} | null
 
     // Queue state
@@ -1015,10 +1108,8 @@
       }
     }
 
-    async function loadFromHistory(id) {
-      const entry = historyEntries.find(e => e.id === id);
-      if (!entry) return;
-      showImage(`/images/${entry.filename}`, entry.filename);
+    async function loadFromEntry(entry, imgBase) {
+      showImage(`${imgBase}${entry.filename}`, entry.filename);
       document.getElementById('prompt').value = entry.prompt;
       document.getElementById('negative').value = entry.negative_prompt || '';
       if (entry.workflow_type) {
@@ -1031,11 +1122,16 @@
       for (let i = 0; i < 3; i++) clearImageSlot(i);
       if (Array.isArray(entry.input_images)) {
         for (let i = 0; i < entry.input_images.length; i++) {
-          await loadSlotFromPath(i, `/images/${entry.input_images[i]}`);
+          await loadSlotFromPath(i, `${imgBase}${entry.input_images[i]}`);
         }
       }
       setStatus('Loaded from history', 'success');
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function loadFromHistory(id) {
+      const entry = historyEntries.find(e => e.id === id);
+      if (entry) loadFromEntry(entry, '/images/');
     }
 
     function dateGroupLabel(isoTimestamp) {
@@ -1063,6 +1159,7 @@
             <div class="history-time">${new Date(e.timestamp).toLocaleTimeString()}${e.workflow_type ? ` · ${escapeHtml(wfLabels[e.workflow_type] || e.workflow_type)}` : ''}</div>
           </div>
           <div class="history-actions">
+            <button class="addlib-btn" onclick="event.stopPropagation(); openLibPickerForHistoryEntry(event, ${e.id})" title="Add to library">+ Lib</button>
             <a class="history-dl" href="/images/${escapeHtml(e.filename || '')}"
                download="${escapeHtml(e.filename || 'image.png')}"
                onclick="event.stopPropagation()">Download</a>
@@ -1099,6 +1196,7 @@
           </div>
         `).join('');
         updateSelectionUI();
+        if (modalCtx && modalCtx.libId === null) modalCtx.entries = historyEntries;
       } catch (err) {
         console.warn('History load failed:', err);
       }
@@ -1128,15 +1226,26 @@
       }
     }
 
-    // ── History lightbox modal ──────────────────────────────────────────────
-    let historyModalIndex = -1;
+    // ── Unified lightbox modal ─────────────────────────────────────────────────
+    // modalCtx: { entries[], index, imgBase, libId (null=history) }
     const wfLabels = { flux: 'Flux', qwen2512: 'Qwen 2512', qwen2511: 'Qwen 2511' };
 
     function openHistoryModal(id) {
       const idx = historyEntries.findIndex(e => e.id === id);
       if (idx === -1) return;
-      historyModalIndex = idx;
-      renderHistoryModal();
+      modalCtx = { entries: historyEntries, index: idx, imgBase: '/images/', libId: null };
+      renderModal();
+      document.getElementById('hmOverlay').style.display = 'flex';
+      document.addEventListener('keydown', onHistoryModalKey);
+    }
+
+    function openLibModal(libId, entryId) {
+      const lib = libraries.find(l => l.id === libId);
+      if (!lib) return;
+      const idx = (lib.entries || []).findIndex(e => e.id === entryId);
+      if (idx === -1) return;
+      modalCtx = { entries: lib.entries, index: idx, imgBase: `/images/lib/${libId}/`, libId };
+      renderModal();
       document.getElementById('hmOverlay').style.display = 'flex';
       document.addEventListener('keydown', onHistoryModalKey);
     }
@@ -1144,28 +1253,31 @@
     function closeHistoryModal() {
       document.getElementById('hmOverlay').style.display = 'none';
       document.removeEventListener('keydown', onHistoryModalKey);
+      modalCtx = null;
     }
 
     function onHistoryModalKey(e) {
       if (e.key === 'Escape') closeHistoryModal();
-      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') navigateHistoryModal(-1);
-      else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') navigateHistoryModal(1);
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') navigateModal(-1);
+      else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') navigateModal(1);
     }
 
-    function navigateHistoryModal(dir) {
-      const next = historyModalIndex + dir;
-      if (next < 0 || next >= historyEntries.length) return;
-      historyModalIndex = next;
-      renderHistoryModal();
+    function navigateModal(dir) {
+      if (!modalCtx) return;
+      const next = modalCtx.index + dir;
+      if (next < 0 || next >= modalCtx.entries.length) return;
+      modalCtx.index = next;
+      renderModal();
     }
 
-    function renderHistoryModal() {
-      const e = historyEntries[historyModalIndex];
+    function renderModal() {
+      if (!modalCtx) return;
+      const e = modalCtx.entries[modalCtx.index];
       if (!e) return;
-      const total = historyEntries.length;
+      const total = modalCtx.entries.length;
 
-      document.getElementById('hmImage').src = `/images/${e.filename || ''}`;
-      document.getElementById('hmCounter').textContent = `${historyModalIndex + 1} / ${total}`;
+      document.getElementById('hmImage').src = `${modalCtx.imgBase}${e.filename || ''}`;
+      document.getElementById('hmCounter').textContent = `${modalCtx.index + 1} / ${total}`;
       document.getElementById('hmPrompt').textContent = e.prompt || '';
       const negEl = document.getElementById('hmNegative');
       negEl.textContent = e.negative_prompt ? `− ${e.negative_prompt}` : '';
@@ -1179,44 +1291,57 @@
       document.getElementById('hmMeta').textContent = [time, wf].filter(Boolean).join(' · ');
       document.getElementById('hmFilename').textContent = e.filename || '';
       const dl = document.getElementById('hmDownload');
-      dl.href = `/images/${e.filename || ''}`;
+      dl.href = `${modalCtx.imgBase}${e.filename || ''}`;
       dl.download = e.filename || 'image.png';
-
-      document.getElementById('hmPrev').disabled = historyModalIndex === 0;
-      document.getElementById('hmNext').disabled = historyModalIndex === total - 1;
-      document.getElementById('hmSelectCb').checked = selectedHistoryIds.has(e.id);
+      document.getElementById('hmPrev').disabled = modalCtx.index === 0;
+      document.getElementById('hmNext').disabled = modalCtx.index === total - 1;
+      // Select checkbox only makes sense in history mode
+      const selRow = document.getElementById('hmSelectCb').closest('.hm-select-label');
+      if (modalCtx.libId === null) {
+        selRow.style.display = '';
+        document.getElementById('hmSelectCb').checked = selectedHistoryIds.has(e.id);
+      } else {
+        selRow.style.display = 'none';
+      }
     }
 
     function toggleModalSelection(checked) {
-      const e = historyEntries[historyModalIndex];
+      if (!modalCtx || modalCtx.libId !== null) return;
+      const e = modalCtx.entries[modalCtx.index];
       if (!e) return;
       toggleHistorySelect(e.id, checked);
     }
 
-    function useHistoryModalEntry() {
-      const e = historyEntries[historyModalIndex];
+    function useModalEntry() {
+      if (!modalCtx) return;
+      const e = modalCtx.entries[modalCtx.index];
       if (!e) return;
       closeHistoryModal();
-      loadFromHistory(e.id);
+      loadFromEntry(e, modalCtx.imgBase);
     }
 
-    async function deleteHistoryModalEntry() {
-      const e = historyEntries[historyModalIndex];
+    async function deleteModalEntry() {
+      if (!modalCtx) return;
+      const e = modalCtx.entries[modalCtx.index];
       if (!e) return;
-      if (!confirm('Delete this history entry?')) return;
+      if (!confirm('Delete this entry?')) return;
       try {
-        await fetch(`/api/history/${e.id}`, { method: 'DELETE' });
-        selectedHistoryIds.delete(e.id);
-        await refreshHistory();
-        // Navigate to next entry if possible, else previous, else close
-        if (historyEntries.length === 0) {
+        if (modalCtx.libId !== null) {
+          await fetch(`/api/libraries/${modalCtx.libId}/entries/${e.id}`, { method: 'DELETE' });
+          await refreshLibraries();
+        } else {
+          await fetch(`/api/history/${e.id}`, { method: 'DELETE' });
+          selectedHistoryIds.delete(e.id);
+          await refreshHistory();
+        }
+        if (!modalCtx || modalCtx.entries.length === 0) {
           closeHistoryModal();
         } else {
-          historyModalIndex = Math.min(historyModalIndex, historyEntries.length - 1);
-          renderHistoryModal();
+          modalCtx.index = Math.min(modalCtx.index, modalCtx.entries.length - 1);
+          renderModal();
         }
       } catch (err) {
-        console.warn('History delete failed:', err);
+        console.warn('Delete failed:', err);
       }
     }
 
@@ -1323,6 +1448,179 @@
       a.href = url; a.download = `prompts-${stamp}.txt`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    // ── Libraries ──────────────────────────────────────────────────────────────
+
+    async function refreshLibraries() {
+      try {
+        const res = await fetch('/api/libraries');
+        libraries = await res.json();
+        renderLibraryList();
+        if (modalCtx && modalCtx.libId !== null) {
+          const lib = libraries.find(l => l.id === modalCtx.libId);
+          modalCtx.entries = lib ? (lib.entries || []) : [];
+        }
+      } catch (err) {
+        console.warn('Libraries load failed:', err);
+      }
+    }
+
+    function renderLibraryList() {
+      const container = document.getElementById('libraryList');
+      if (!libraries.length) { container.innerHTML = ''; return; }
+      container.innerHTML = libraries.map(lib => {
+        const entries = lib.entries || [];
+        const imgBase = `/images/lib/${lib.id}/`;
+        const cards = entries.length
+          ? entries.map(e => renderLibraryCard(e, lib.id, imgBase)).join('')
+          : '<div class="library-empty">No images yet.</div>';
+        return `
+          <div class="library-section">
+            <div class="library-section-header">
+              <span class="library-section-name">${escapeHtml(lib.name)}</span>
+              <button class="lib-delete-btn" onclick="deleteLibrary(${lib.id})">Delete Library</button>
+            </div>
+            <div class="history-group-cards">${cards}</div>
+          </div>`;
+      }).join('');
+    }
+
+    function renderLibraryCard(e, libId, imgBase) {
+      return `
+        <div class="history-card" onclick="openLibModal(${libId}, ${e.id})">
+          <img class="history-thumb" src="${imgBase}${escapeHtml(e.filename || '')}" alt="" />
+          <div class="history-meta">
+            <div class="history-prompt">${escapeHtml(e.prompt || '')}</div>
+            ${e.negative_prompt ? `<div class="history-negative">− ${escapeHtml(e.negative_prompt)}</div>` : ''}
+            ${e.loras && e.loras.length ? `<div class="history-loras">${e.loras.map(l => `<span class="history-lora-pill">${escapeHtml(l)}</span>`).join('')}</div>` : ''}
+            <div class="history-time">${e.timestamp ? new Date(e.timestamp).toLocaleTimeString() : ''}${e.workflow_type ? ` · ${escapeHtml(wfLabels[e.workflow_type] || e.workflow_type)}` : ''}</div>
+          </div>
+          <div class="history-actions">
+            <button class="addlib-btn" onclick="event.stopPropagation(); openLibPickerForLibEntry(event, ${libId}, ${e.id})" title="Copy to library">Copy</button>
+            <a class="history-dl" href="${imgBase}${escapeHtml(e.filename || '')}"
+               download="${escapeHtml(e.filename || 'image.png')}"
+               onclick="event.stopPropagation()">Download</a>
+            <button class="history-delete" onclick="event.stopPropagation(); deleteLibraryEntry(${libId}, ${e.id})" title="Remove">&#x2715;</button>
+          </div>
+        </div>`;
+    }
+
+    async function deleteLibraryEntry(libId, entryId) {
+      if (!confirm('Remove this entry from the library?')) return;
+      try {
+        await fetch(`/api/libraries/${libId}/entries/${entryId}`, { method: 'DELETE' });
+        await refreshLibraries();
+      } catch (err) { console.warn('Library entry delete failed:', err); }
+    }
+
+    async function deleteLibrary(libId) {
+      const lib = libraries.find(l => l.id === libId);
+      if (!lib) return;
+      if (!confirm(`Delete library "${lib.name}" and all its images?`)) return;
+      try {
+        await fetch(`/api/libraries/${libId}`, { method: 'DELETE' });
+        await refreshLibraries();
+      } catch (err) { console.warn('Library delete failed:', err); }
+    }
+
+    function showCreateLibraryForm() {
+      document.getElementById('createLibraryRow').style.display = 'flex';
+      document.getElementById('newLibraryNameInput').focus();
+    }
+    function hideCreateLibraryForm() {
+      document.getElementById('createLibraryRow').style.display = 'none';
+      document.getElementById('newLibraryNameInput').value = '';
+    }
+    async function submitCreateLibrary() {
+      const name = document.getElementById('newLibraryNameInput').value.trim();
+      if (!name) return;
+      try {
+        await fetch('/api/libraries', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name }),
+        });
+        hideCreateLibraryForm();
+        await refreshLibraries();
+      } catch (err) { console.warn('Create library failed:', err); }
+    }
+
+    // ── Library picker dropdown ────────────────────────────────────────────────
+
+    let libPickerCallback = null;
+
+    function showLibPicker(event, callback, excludeLibId = null) {
+      event.stopPropagation();
+      libPickerCallback = callback;
+      const picker = document.getElementById('libPickerDropdown');
+      const available = libraries.filter(l => l.id !== excludeLibId);
+      picker.innerHTML = available.length
+        ? available.map(l => `<div class="lib-picker-item" onclick="selectLibFromPicker(${l.id})">${escapeHtml(l.name)}</div>`).join('')
+        : '<div class="lib-picker-empty">No libraries yet — create one first.</div>';
+      const rect = event.currentTarget.getBoundingClientRect();
+      picker.style.top = `${rect.bottom + window.scrollY + 4}px`;
+      picker.style.left = `${rect.left + window.scrollX}px`;
+      picker.style.display = 'block';
+    }
+
+    function selectLibFromPicker(libId) {
+      hideLibPicker();
+      if (libPickerCallback) libPickerCallback(libId);
+    }
+
+    function hideLibPicker() {
+      document.getElementById('libPickerDropdown').style.display = 'none';
+      libPickerCallback = null;
+    }
+
+    document.addEventListener('click', hideLibPicker);
+
+    function openLibPickerForHistoryEntry(event, historyId) {
+      showLibPicker(event, (libId) => addEntryToLibrary(historyId, null, libId));
+    }
+    function openLibPickerForLibEntry(event, sourceLibId, entryId) {
+      showLibPicker(event, (libId) => addEntryToLibrary(entryId, sourceLibId, libId), sourceLibId);
+    }
+    function openLibPickerForModal(event) {
+      if (!modalCtx) return;
+      const e = modalCtx.entries[modalCtx.index];
+      if (!e) return;
+      showLibPicker(event, (libId) => addEntryToLibrary(e.id, modalCtx.libId, libId), modalCtx.libId);
+    }
+    function openLibPickerForBulk(event) {
+      showLibPicker(event, async (libId) => {
+        const entries = historyEntries.filter(e => selectedHistoryIds.has(e.id));
+        for (const e of entries) await addEntryToLibrary(e.id, null, libId);
+        await refreshLibraries();
+        setStatus(`Added ${entries.length} image${entries.length === 1 ? '' : 's'} to library`, 'success');
+      });
+    }
+
+    async function addEntryToLibrary(entryId, sourceLibId, targetLibId) {
+      const sourceEntries = sourceLibId === null
+        ? historyEntries
+        : (libraries.find(l => l.id === sourceLibId)?.entries || []);
+      const entry = sourceEntries.find(e => e.id === entryId);
+      if (!entry) return;
+      try {
+        await fetch(`/api/libraries/${targetLibId}/entries`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            filename: entry.filename,
+            input_images: entry.input_images || [],
+            source_lib_id: sourceLibId,
+            prompt: entry.prompt,
+            negative_prompt: entry.negative_prompt,
+            workflow_type: entry.workflow_type,
+            loras: entry.loras,
+            timestamp: entry.timestamp,
+          }),
+        });
+        await refreshLibraries();
+        setStatus('Added to library', 'success');
+      } catch (err) { console.warn('Add to library failed:', err); }
     }
 
     // Snapshot current form values into a job params object.
@@ -1509,8 +1807,9 @@
     window.addEventListener('resize', updatePanelHeight);
     requestAnimationFrame(updatePanelHeight);
 
-    // Load history and credits on page init
+    // Load history, libraries, and credits on page init
     refreshHistory();
+    refreshLibraries();
     refreshCredits();
   </script>
 </body>
