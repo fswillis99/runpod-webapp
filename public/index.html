@@ -1226,7 +1226,11 @@
       if (checked) selectedHistoryIds.add(id);
       else selectedHistoryIds.delete(id);
       const card = document.querySelector(`.history-card[data-id="${id}"]`);
-      if (card) card.classList.toggle('selected', checked);
+      if (card) {
+        card.classList.toggle('selected', checked);
+        const box = card.querySelector('input[type="checkbox"]');
+        if (box) box.checked = checked;
+      }
       updateSelectionUI();
     }
 
