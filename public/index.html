@@ -165,7 +165,7 @@
     button:disabled { opacity: 0.5; cursor: not-allowed; }
 
     .btn-download {
-      display: none;
+      visibility: hidden;
       width: 100%;
       padding: 0.6rem;
       border: 1px solid #444;
@@ -248,6 +248,7 @@
     /* ── Right panel: image ── */
     .panel-image {
       flex: 1;
+      aspect-ratio: 1;
       min-height: 400px;
       background: #1a1a1a;
       border: 1px solid #333;
@@ -1189,7 +1190,7 @@
       const dl = document.getElementById('downloadBtn');
       dl.href = displaySrc;
       dl.download = filename;
-      dl.style.display = 'block';
+      dl.style.visibility = 'visible';
       // Revoke the old blob URL only after the new image has loaded to prevent
       // the img element briefly having an invalid src, which collapses the panel.
       if (prevBlobUrl) {
@@ -1980,7 +1981,7 @@
       if (document.getElementById('resultImg').style.display === 'none') {
         document.getElementById('placeholder').style.display = '';
       }
-      document.getElementById('downloadBtn').style.display = 'none';
+      document.getElementById('downloadBtn').style.visibility = 'hidden';
 
       let jobId;
       try {
@@ -2100,17 +2101,6 @@
       });
     })();
 
-    // Lock the image panel to a stable square; recalculate only on resize.
-    // The img is absolutely positioned (object-fit: contain) so it never
-    // drives the panel's height — images and spinner live inside a fixed box.
-    function updatePanelHeight() {
-      const panel = document.getElementById('imagePanel');
-      const w = panel.getBoundingClientRect().width;
-      if (w > 0) panel.style.height = Math.max(400, Math.round(w)) + 'px';
-    }
-    window.addEventListener('resize', updatePanelHeight);
-    requestAnimationFrame(updatePanelHeight);
-
     // ── Trash ─────────────────────────────────────────────────────────────────
 
     function toggleTrashSection() {
@@ -2208,6 +2198,7 @@
         console.warn('Empty trash failed:', err);
       }
     }
+
 
     // Load history, libraries, and credits on page init
     refreshHistory();
