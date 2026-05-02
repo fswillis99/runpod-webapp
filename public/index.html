@@ -887,6 +887,24 @@
     </div>
   </div>
 
+  <!-- Libraries -->
+  <div class="libraries-section">
+    <div class="libraries-header">
+      <span>Libraries</span>
+      <button class="new-lib-btn" onclick="showCreateLibraryForm()">+ New Library</button>
+    </div>
+    <div class="create-library-row" id="createLibraryRow" style="display:none">
+      <input type="text" id="newLibraryNameInput" placeholder="Library name…"
+             onkeydown="if(event.key==='Enter')submitCreateLibrary();else if(event.key==='Escape')hideCreateLibraryForm()" />
+      <button class="btn-create" onclick="submitCreateLibrary()">Create</button>
+      <button class="btn-cancel" onclick="hideCreateLibraryForm()">Cancel</button>
+    </div>
+    <div id="libraryList"></div>
+  </div>
+
+  <!-- Shared library picker dropdown -->
+  <div id="libPickerDropdown" class="lib-picker" style="display:none"></div>
+
   <!-- History -->
   <div class="history-section">
     <div class="history-header">
@@ -911,24 +929,6 @@
       <div class="history-empty">No history yet.</div>
     </div>
   </div>
-
-  <!-- Libraries -->
-  <div class="libraries-section">
-    <div class="libraries-header">
-      <span>Libraries</span>
-      <button class="new-lib-btn" onclick="showCreateLibraryForm()">+ New Library</button>
-    </div>
-    <div class="create-library-row" id="createLibraryRow" style="display:none">
-      <input type="text" id="newLibraryNameInput" placeholder="Library name…"
-             onkeydown="if(event.key==='Enter')submitCreateLibrary();else if(event.key==='Escape')hideCreateLibraryForm()" />
-      <button class="btn-create" onclick="submitCreateLibrary()">Create</button>
-      <button class="btn-cancel" onclick="hideCreateLibraryForm()">Cancel</button>
-    </div>
-    <div id="libraryList"></div>
-  </div>
-
-  <!-- Shared library picker dropdown -->
-  <div id="libPickerDropdown" class="lib-picker" style="display:none"></div>
 
   <script>
     const POLL_INTERVAL_MS = 2000;
@@ -1565,8 +1565,9 @@
     }
 
     function selectLibFromPicker(libId) {
+      const cb = libPickerCallback;
       hideLibPicker();
-      if (libPickerCallback) libPickerCallback(libId);
+      if (cb) cb(libId);
     }
 
     function hideLibPicker() {
