@@ -920,7 +920,18 @@
       }
     }
 
-    function loadFromHistory(id) {
+    async function loadSlotFromPath(slotIdx, imagePath) {
+      try {
+        const res = await fetch(imagePath);
+        if (!res.ok) return;
+        const blob = await res.blob();
+        handleImageFile(slotIdx, blob, imagePath.split('/').pop());
+      } catch (err) {
+        console.warn('Failed to load input image:', err);
+      }
+    }
+
+    async function loadFromHistory(id) {
       const entry = historyEntries.find(e => e.id === id);
       if (!entry) return;
       showImage(`/images/${entry.filename}`, entry.filename);
@@ -933,6 +944,12 @@
       document.querySelectorAll('.lora-toggle').forEach(btn => {
         btn.classList.toggle('active', !!(entry.loras && entry.loras.includes(btn.dataset.lora)));
       });
+      for (let i = 0; i < 3; i++) clearImageSlot(i);
+      if (Array.isArray(entry.input_images)) {
+        for (let i = 0; i < entry.input_images.length; i++) {
+          await loadSlotFromPath(i, `/images/${entry.input_images[i]}`);
+        }
+      }
       setStatus('Loaded from history', 'success');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -998,12 +1015,12 @@
       }
     }
 
-    async function saveToHistory({ prompt, negative_prompt, workflow_type, loras, filename, image }) {
+    async function saveToHistory({ prompt, negative_prompt, workflow_type, loras, filename, image, input_images }) {
       try {
         await fetch('/api/history', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt, negative_prompt, workflow_type, loras, filename, image, timestamp: new Date().toISOString() }),
+          body: JSON.stringify({ prompt, negative_prompt, workflow_type, loras, filename, image, input_images, timestamp: new Date().toISOString() }),
         });
         await refreshHistory();
       } catch (err) {
@@ -1201,6 +1218,7 @@
               loras: params.loras,
               filename: imageEntry.filename,
               image: imageEntry.data,
+              input_images: params.images || [],
             });
             refreshCredits();
             finishJob();
