@@ -1339,8 +1339,9 @@
       if (!modalCtx) return;
       const e = modalCtx.entries[modalCtx.index];
       if (!e) return;
+      const imgBase = modalCtx.imgBase;
       closeHistoryModal();
-      loadFromEntry(e, modalCtx.imgBase);
+      loadFromEntry(e, imgBase);
     }
 
     async function deleteModalEntry() {
