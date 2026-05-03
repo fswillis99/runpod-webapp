@@ -607,6 +607,8 @@ app.get("/api/status/:jobId", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () =>
-  console.log(`Server running on http://localhost:${PORT}`),
+const HOST = process.env.HOST || "127.0.0.1";
+const listenHost = HOST === "IP_ADDR_ANY" ? undefined : HOST;
+app.listen(PORT, listenHost, () =>
+  console.log(`Server running on http://${listenHost ?? "0.0.0.0"}:${PORT}`),
 );
