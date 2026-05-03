@@ -1,0 +1,8 @@
+# .github/workflows/always-pass.yml
+name: Branch check
+on: [push]
+jobs:
+  ready:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "OK"
