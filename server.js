@@ -237,6 +237,12 @@ setInterval(purgeOldTrash, 60 * 60 * 1000);
 
 app.get("/api/trash", (req, res) => res.json(loadTrash()));
 
+// Insert entry into a newest-first array at the correct chronological position.
+function insertByDate(arr, entry) {
+  const idx = arr.findIndex(e => e.id < entry.id);
+  if (idx === -1) arr.push(entry); else arr.splice(idx, 0, entry);
+}
+
 app.post("/api/trash/:trashId/restore", (req, res) => {
   const trashId = parseInt(req.params.trashId, 10);
   const trash = loadTrash();
@@ -260,7 +266,7 @@ app.post("/api/trash/:trashId/restore", (req, res) => {
     moveBack(IMAGES_DIR);
     const history = loadHistory();
     if (!history.some(e => e.id === originalEntry.id)) {
-      history.unshift(originalEntry);
+      insertByDate(history, originalEntry);
       if (history.length > MAX_HISTORY) history.splice(MAX_HISTORY);
       saveHistory(history);
     }
@@ -273,7 +279,7 @@ app.post("/api/trash/:trashId/restore", (req, res) => {
       moveBack(dir);
       lib.entries = lib.entries || [];
       if (!lib.entries.some(e => e.id === originalEntry.id)) {
-        lib.entries.unshift(originalEntry);
+        insertByDate(lib.entries, originalEntry);
       }
       saveLibraries(libs);
     } else {
@@ -281,7 +287,7 @@ app.post("/api/trash/:trashId/restore", (req, res) => {
       moveBack(IMAGES_DIR);
       const history = loadHistory();
       if (!history.some(e => e.id === originalEntry.id)) {
-        history.unshift(originalEntry);
+        insertByDate(history, originalEntry);
         if (history.length > MAX_HISTORY) history.splice(MAX_HISTORY);
         saveHistory(history);
       }
