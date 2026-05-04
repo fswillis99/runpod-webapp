@@ -532,6 +532,14 @@
       transition: border-color 0.15s, color 0.15s;
     }
     .lib-delete-btn:hover { border-color: #cc2233; color: #cc2233; }
+    .lib-import-btn {
+      font-size: 0.72rem; padding: 0.25rem 0.55rem;
+      border: 1px solid #333; border-radius: 6px;
+      background: transparent; color: #555; cursor: pointer; width: auto;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .lib-import-btn:hover { border-color: #6366f1; color: #6366f1; }
+    .lib-import-btn:disabled { opacity: 0.5; cursor: default; }
     .library-empty { color: #333; font-size: 0.85rem; padding: 0.5rem 0; }
 
     /* ── History lightbox modal ── */
@@ -1516,6 +1524,7 @@
                          onchange="onLibSelectAllChange(${lib.id})" />
                   All
                 </label>
+                <button class="lib-import-btn" onclick="importLibraryImages(${lib.id}, this)">Import</button>
                 <button class="lib-delete-btn" onclick="deleteLibrary(${lib.id})">Delete</button>
               </div>
             </div>
@@ -1712,6 +1721,22 @@
         await fetch(`/api/libraries/${libId}`, { method: 'DELETE' });
         await refreshLibraries();
       } catch (err) { console.warn('Library delete failed:', err); }
+    }
+
+    async function importLibraryImages(libId, btn) {
+      if (btn) { btn.disabled = true; btn.textContent = 'Importing…'; }
+      try {
+        const res = await fetch(`/api/libraries/${libId}/import`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Import failed');
+        await refreshLibraries();
+        if (data.imported === 0) alert('No new images found to import.');
+        else alert(`Imported ${data.imported} image${data.imported === 1 ? '' : 's'}${data.skipped ? ` (${data.skipped} already present)` : ''}.`);
+      } catch (err) {
+        alert(`Import error: ${err.message}`);
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Import'; }
+      }
     }
 
     function showCreateLibraryForm() {
