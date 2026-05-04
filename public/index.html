@@ -1277,18 +1277,14 @@
           list.innerHTML = '<div class="history-empty">No history yet.</div>';
           return;
         }
-        // Group entries by calendar date (newest first, preserving server order)
-        const groups = [];
+        // Group entries by calendar date, then sort groups newest-first.
         const groupMap = new Map();
         for (const e of historyEntries) {
           const label = dateGroupLabel(e.timestamp);
-          if (!groupMap.has(label)) {
-            const g = { label, entries: [] };
-            groups.push(g);
-            groupMap.set(label, g);
-          }
+          if (!groupMap.has(label)) groupMap.set(label, { label, date: new Date(e.timestamp), entries: [] });
           groupMap.get(label).entries.push(e);
         }
+        const groups = [...groupMap.values()].sort((a, b) => b.date - a.date);
         list.innerHTML = groups.map(g => `
           <div>
             <div class="history-group-label">${escapeHtml(g.label)}</div>
