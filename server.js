@@ -15,6 +15,8 @@ const IMAGES_DIR = path.join(__dirname, "images");
 if (!fs.existsSync(IMAGES_DIR)) fs.mkdirSync(IMAGES_DIR);
 const LIB_DIR = path.join(IMAGES_DIR, "lib");
 if (!fs.existsSync(LIB_DIR)) fs.mkdirSync(LIB_DIR);
+const TRASH_DIR = path.join(IMAGES_DIR, "trash");
+if (!fs.existsSync(TRASH_DIR)) fs.mkdirSync(TRASH_DIR);
 app.use("/images", express.static(IMAGES_DIR));
 
 // CRC32 implementation for PNG chunk checksums
@@ -184,6 +186,138 @@ function migrateHistory() {
 }
 migrateHistory();
 
+// ---------------------------------------------------------------------------
+// Trash
+// ---------------------------------------------------------------------------
+const TRASH_FILE = path.join(__dirname, "trash.json");
+const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+function loadTrash() {
+  try { return JSON.parse(fs.readFileSync(TRASH_FILE, "utf8")); }
+  catch { return []; }
+}
+
+function saveTrash(entries) {
+  fs.writeFileSync(TRASH_FILE, JSON.stringify(entries));
+}
+
+// Returns a trashId (number) that has no existing subdirectory in TRASH_DIR.
+function generateTrashId() {
+  let id;
+  do { id = Date.now(); } while (fs.existsSync(path.join(TRASH_DIR, String(id))));
+  return id;
+}
+
+function moveFilesToTrash(srcDir, filenames, trashEntryDir) {
+  fs.mkdirSync(trashEntryDir, { recursive: true });
+  for (const fname of filenames) {
+    if (!fname) continue;
+    const src = path.join(srcDir, fname);
+    if (fs.existsSync(src)) fs.renameSync(src, path.join(trashEntryDir, fname));
+  }
+}
+
+function purgeOldTrash() {
+  const trash = loadTrash();
+  const cutoff = Date.now() - TRASH_RETENTION_MS;
+  const keep = [];
+  for (const entry of trash) {
+    if (new Date(entry.deletedAt).getTime() < cutoff) {
+      const dir = path.join(TRASH_DIR, String(entry.trashId));
+      if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+    } else {
+      keep.push(entry);
+    }
+  }
+  if (keep.length !== trash.length) saveTrash(keep);
+}
+
+purgeOldTrash();
+setInterval(purgeOldTrash, 60 * 60 * 1000);
+
+app.get("/api/trash", (req, res) => res.json(loadTrash()));
+
+app.post("/api/trash/:trashId/restore", (req, res) => {
+  const trashId = parseInt(req.params.trashId, 10);
+  const trash = loadTrash();
+  const entry = trash.find(e => e.trashId === trashId);
+  if (!entry) return res.status(404).json({ error: "trash entry not found" });
+
+  const trashEntryDir = path.join(TRASH_DIR, String(trashId));
+  const { source, libId, libName, libSlug, trashId: _tid, deletedAt: _da, ...originalEntry } = entry;
+
+  const moveBack = (dstDir) => {
+    const files = [originalEntry.filename, ...(originalEntry.input_images || [])].filter(Boolean);
+    for (const f of files) {
+      const src = path.join(trashEntryDir, f);
+      if (fs.existsSync(src)) fs.renameSync(src, path.join(dstDir, f));
+    }
+  };
+
+  let restoredTo = source;
+
+  if (source === "history") {
+    moveBack(IMAGES_DIR);
+    const history = loadHistory();
+    if (!history.some(e => e.id === originalEntry.id)) {
+      history.unshift(originalEntry);
+      if (history.length > MAX_HISTORY) history.splice(MAX_HISTORY);
+      saveHistory(history);
+    }
+  } else {
+    const libs = loadLibraries();
+    const lib = libs.find(l => l.id === libId);
+    if (lib) {
+      const dir = libDir(lib);
+      fs.mkdirSync(dir, { recursive: true });
+      moveBack(dir);
+      lib.entries = lib.entries || [];
+      if (!lib.entries.some(e => e.id === originalEntry.id)) {
+        lib.entries.unshift(originalEntry);
+      }
+      saveLibraries(libs);
+    } else {
+      // Library gone — restore to history instead
+      moveBack(IMAGES_DIR);
+      const history = loadHistory();
+      if (!history.some(e => e.id === originalEntry.id)) {
+        history.unshift(originalEntry);
+        if (history.length > MAX_HISTORY) history.splice(MAX_HISTORY);
+        saveHistory(history);
+      }
+      restoredTo = "history";
+    }
+  }
+
+  if (fs.existsSync(trashEntryDir)) fs.rmSync(trashEntryDir, { recursive: true, force: true });
+  saveTrash(trash.filter(e => e.trashId !== trashId));
+
+  const note = restoredTo !== source
+    ? `Original library "${libName}" no longer exists; restored to History instead.`
+    : null;
+  res.json({ ok: true, restored_to: restoredTo, ...(note && { note }) });
+});
+
+app.delete("/api/trash/:trashId", (req, res) => {
+  const trashId = parseInt(req.params.trashId, 10);
+  const trash = loadTrash();
+  if (!trash.some(e => e.trashId === trashId)) return res.status(404).json({ error: "not found" });
+  const dir = path.join(TRASH_DIR, String(trashId));
+  if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+  saveTrash(trash.filter(e => e.trashId !== trashId));
+  res.json({ ok: true });
+});
+
+app.delete("/api/trash", (req, res) => {
+  const trash = loadTrash();
+  for (const entry of trash) {
+    const dir = path.join(TRASH_DIR, String(entry.trashId));
+    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+  }
+  saveTrash([]);
+  res.json({ ok: true });
+});
+
 app.get("/api/history", (req, res) => {
   res.json(loadHistory());
 });
@@ -228,15 +362,15 @@ app.delete("/api/history/:id", (req, res) => {
   const id = parseInt(req.params.id, 10);
   const history = loadHistory();
   const entry = history.find(e => e.id === id);
-  const filtered = history.filter(e => e.id !== id);
-  saveHistory(filtered);
-  if (entry?.filename) {
-    const imgPath = path.join(IMAGES_DIR, entry.filename);
-    if (fs.existsSync(imgPath)) fs.unlinkSync(imgPath);
-  }
-  for (const fname of (entry?.input_images || [])) {
-    const p = path.join(IMAGES_DIR, fname);
-    if (fs.existsSync(p)) fs.unlinkSync(p);
+  saveHistory(history.filter(e => e.id !== id));
+  if (entry) {
+    const trashId = generateTrashId();
+    const trashEntryDir = path.join(TRASH_DIR, String(trashId));
+    const files = [entry.filename, ...(entry.input_images || [])].filter(Boolean);
+    moveFilesToTrash(IMAGES_DIR, files, trashEntryDir);
+    const trash = loadTrash();
+    trash.push({ ...entry, trashId, deletedAt: new Date().toISOString(), source: "history", libId: null, libName: null, libSlug: null });
+    saveTrash(trash);
   }
   res.json({ ok: true });
 });
@@ -287,7 +421,19 @@ app.delete("/api/libraries/:id", (req, res) => {
   const libs = loadLibraries();
   const lib = libs.find(l => l.id === id);
   saveLibraries(libs.filter(l => l.id !== id));
-  if (lib) { const dir = libDir(lib); if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true }); }
+  if (lib) {
+    const dir = libDir(lib);
+    const trash = loadTrash();
+    for (const entry of (lib.entries || [])) {
+      const trashId = generateTrashId();
+      const trashEntryDir = path.join(TRASH_DIR, String(trashId));
+      const files = [entry.filename, ...(entry.input_images || [])].filter(Boolean);
+      moveFilesToTrash(dir, files, trashEntryDir);
+      trash.push({ ...entry, trashId, deletedAt: new Date().toISOString(), source: "library", libId: id, libName: lib.name, libSlug: lib.slug || String(id) });
+    }
+    if ((lib.entries || []).length) saveTrash(trash);
+    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+  }
   res.json({ ok: true });
 });
 
@@ -338,9 +484,15 @@ app.delete("/api/libraries/:libId/entries/:entryId", (req, res) => {
   const entry = (lib.entries || []).find(e => e.id === entryId);
   lib.entries = (lib.entries || []).filter(e => e.id !== entryId);
   saveLibraries(libs);
-  const dir = libDir(lib);
-  if (entry?.filename) { const p = path.join(dir, entry.filename); if (fs.existsSync(p)) fs.unlinkSync(p); }
-  for (const f of (entry?.input_images || [])) { const p = path.join(dir, f); if (fs.existsSync(p)) fs.unlinkSync(p); }
+  if (entry) {
+    const trashId = generateTrashId();
+    const trashEntryDir = path.join(TRASH_DIR, String(trashId));
+    const files = [entry.filename, ...(entry.input_images || [])].filter(Boolean);
+    moveFilesToTrash(libDir(lib), files, trashEntryDir);
+    const trash = loadTrash();
+    trash.push({ ...entry, trashId, deletedAt: new Date().toISOString(), source: "library", libId, libName: lib.name, libSlug: lib.slug || String(libId) });
+    saveTrash(trash);
+  }
   res.json({ ok: true });
 });
 
