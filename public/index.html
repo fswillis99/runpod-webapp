@@ -1524,12 +1524,16 @@
     async function bulkDownload() {
       const entries = historyEntries.filter(e => selectedHistoryIds.has(e.id));
       for (const entry of entries) {
+        const res = await fetch(`/images/${entry.filename}`);
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = `/api/download?path=${encodeURIComponent(entry.filename)}`;
+        a.href = url;
         a.download = entry.filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
         await new Promise(r => setTimeout(r, 150));
       }
     }
@@ -1735,12 +1739,16 @@
       const entries = (lib.entries || []).filter(e => sel.has(e.id));
       const slug = lib.slug || String(libId);
       for (const entry of entries) {
+        const res = await fetch(`/images/lib/${slug}/${entry.filename}`);
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = `/api/download?path=${encodeURIComponent(`lib/${slug}/${entry.filename}`)}`;
+        a.href = url;
         a.download = entry.filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
         await new Promise(r => setTimeout(r, 150));
       }
     }
