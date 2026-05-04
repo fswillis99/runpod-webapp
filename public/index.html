@@ -1733,9 +1733,10 @@
       if (!lib) return;
       const sel = getLibSel(libId);
       const entries = (lib.entries || []).filter(e => sel.has(e.id));
+      const slug = lib.slug || String(libId);
       for (const entry of entries) {
         const a = document.createElement('a');
-        a.href = `/api/download?path=${encodeURIComponent(`lib/${libId}/${entry.filename}`)}`;
+        a.href = `/api/download?path=${encodeURIComponent(`lib/${slug}/${entry.filename}`)}`;
         a.download = entry.filename;
         document.body.appendChild(a);
         a.click();
