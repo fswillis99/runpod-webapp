@@ -260,8 +260,6 @@ app.post("/api/trash/:trashId/restore", (req, res) => {
     }
   };
 
-  let restoredTo = source;
-
   if (source === "history") {
     moveBack(IMAGES_DIR);
     const history = loadHistory();
@@ -283,25 +281,22 @@ app.post("/api/trash/:trashId/restore", (req, res) => {
       }
       saveLibraries(libs);
     } else {
-      // Library gone — restore to history instead
-      moveBack(IMAGES_DIR);
-      const history = loadHistory();
-      if (!history.some(e => e.id === originalEntry.id)) {
-        insertByDate(history, originalEntry);
-        if (history.length > MAX_HISTORY) history.splice(MAX_HISTORY);
-        saveHistory(history);
-      }
-      restoredTo = "history";
+      // Library gone — recreate it with the original slug and name
+      const slug = libSlug || nameToSlug(libName || "restored") + "-" + String(Math.floor(1000 + Math.random() * 9000));
+      const newLib = { id: libId, name: libName || slug, slug, entries: [] };
+      const dir = path.join(LIB_DIR, slug);
+      fs.mkdirSync(dir, { recursive: true });
+      moveBack(dir);
+      insertByDate(newLib.entries, originalEntry);
+      libs.push(newLib);
+      saveLibraries(libs);
     }
   }
 
   if (fs.existsSync(trashEntryDir)) fs.rmSync(trashEntryDir, { recursive: true, force: true });
   saveTrash(trash.filter(e => e.trashId !== trashId));
 
-  const note = restoredTo !== source
-    ? `Original library "${libName}" no longer exists; restored to History instead.`
-    : null;
-  res.json({ ok: true, restored_to: restoredTo, ...(note && { note }) });
+  res.json({ ok: true, restored_to: source });
 });
 
 app.delete("/api/trash/:trashId", (req, res) => {
