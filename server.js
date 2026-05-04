@@ -142,6 +142,22 @@ app.get("/api/fetch-image", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Image download — serves images with Content-Disposition: attachment so that
+// Chrome on Windows triggers a file-save instead of an inline navigation.
+// ?path= is relative to IMAGES_DIR; path traversal is rejected.
+// ---------------------------------------------------------------------------
+app.get("/api/download", (req, res) => {
+  const rel = req.query.path;
+  if (!rel || typeof rel !== "string") return res.status(400).end();
+  const normalized = path.normalize(rel);
+  if (normalized.startsWith("..") || path.isAbsolute(normalized)) return res.status(403).end();
+  const abs = path.join(IMAGES_DIR, normalized);
+  res.download(abs, path.basename(abs), (err) => {
+    if (err && !res.headersSent) res.status(404).end();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // History (persisted to history.json, newest first, max 200 entries)
 // Images are stored separately in images/{id}.png
 // ---------------------------------------------------------------------------
