@@ -742,6 +742,59 @@
     }
     .lora-toggle:hover:not(:disabled) { border-color: #6366f1; color: #aaa; background: transparent; }
     .lora-toggle.active { background: #6366f1; border-color: #6366f1; color: #fff; }
+
+    /* ── Trash section ── */
+    .trash-section { width: 100%; max-width: 1100px; margin-top: 3rem; }
+    .trash-header {
+      font-size: 0.75rem; font-weight: 600; color: #555;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      margin-bottom: 0; padding-bottom: 0.6rem;
+      border-bottom: 1px solid #222;
+      display: flex; align-items: center; justify-content: space-between;
+      cursor: pointer; user-select: none;
+    }
+    .trash-header:hover .trash-title { color: #888; }
+    .trash-header-left { display: flex; align-items: center; gap: 0.5rem; }
+    .trash-toggle-arrow { font-size: 0.7rem; color: #555; flex-shrink: 0; }
+    .trash-title { transition: color 0.15s; }
+    .trash-count-badge {
+      font-size: 0.65rem; font-weight: 600;
+      padding: 0.1rem 0.45rem; border-radius: 999px;
+      background: rgba(204,34,51,0.15); color: #cc4455;
+      text-transform: none; letter-spacing: 0;
+    }
+    .trash-hint {
+      font-size: 0.68rem; font-weight: 400; color: #3a3a3a;
+      text-transform: none; letter-spacing: 0;
+    }
+    .trash-empty-btn {
+      font-size: 0.72rem; font-weight: 500; text-transform: none; letter-spacing: 0;
+      padding: 0.28rem 0.65rem; border: 1px solid #333; border-radius: 6px;
+      background: transparent; color: #555; cursor: pointer; width: auto;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .trash-empty-btn:hover { border-color: #cc2233; color: #cc2233; }
+    .trash-content { padding-top: 0.75rem; }
+    .trash-empty-msg { color: #333; font-size: 0.85rem; padding: 0.5rem 0; }
+    .trash-days-badge {
+      font-size: 0.65rem; padding: 0.05rem 0.4rem; border-radius: 999px;
+      background: rgba(204,34,51,0.1); color: #aa3344;
+      white-space: nowrap; flex-shrink: 0;
+    }
+    .trash-days-badge.urgent { background: rgba(204,34,51,0.25); color: #cc2233; }
+    .trash-source-badge {
+      font-size: 0.65rem; padding: 0.05rem 0.4rem; border-radius: 999px;
+      background: #1e1e1e; color: #555; white-space: nowrap; flex-shrink: 0;
+    }
+    .trash-restore-btn {
+      display: inline-block; padding: 0.35rem 0.7rem;
+      border: 1px solid #2a4a2a; border-radius: 6px;
+      background: transparent; color: #4ade80; font-size: 0.75rem;
+      cursor: pointer; white-space: nowrap; width: auto;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+    .trash-restore-btn:hover { border-color: #4ade80; background: rgba(74,222,128,0.08); color: #fff; }
+    .trash-header-controls { display: flex; align-items: center; gap: 0.75rem; }
   </style>
 </head>
 <body>
@@ -900,7 +953,7 @@
           <button class="hm-btn hm-btn-primary" onclick="useModalEntry()">Use in form</button>
           <a class="hm-btn" id="hmDownload" download="">Download</a>
           <button class="hm-btn addlib-btn" onclick="openLibPickerForModal(event)">+ Library</button>
-          <button class="hm-btn hm-btn-danger" onclick="deleteModalEntry()">Delete</button>
+          <button class="hm-btn hm-btn-danger" onclick="deleteModalEntry()">Trash</button>
         </div>
       </div>
     </div>
@@ -949,10 +1002,32 @@
     </div>
   </div>
 
+  <!-- Trash -->
+  <div class="trash-section">
+    <div class="trash-header" onclick="toggleTrashSection()">
+      <div class="trash-header-left">
+        <span class="trash-toggle-arrow" id="trashArrow">▸</span>
+        <span class="trash-title">Trash</span>
+        <span class="trash-count-badge" id="trashCountBadge" style="display:none"></span>
+        <span class="trash-hint">Auto-purge after 30 days</span>
+      </div>
+      <div class="trash-header-controls" onclick="event.stopPropagation()">
+        <button class="trash-empty-btn" id="trashEmptyBtn" onclick="emptyTrash()" style="display:none">Empty Trash</button>
+      </div>
+    </div>
+    <div class="trash-content" id="trashContent" style="display:none">
+      <div class="history-group-cards" id="trashList">
+        <div class="trash-empty-msg">Trash is empty.</div>
+      </div>
+    </div>
+  </div>
+
   <script>
     const POLL_INTERVAL_MS = 2000;
     let historyEntries = [];
     let libraries = [];
+    let trashEntries = [];
+    let trashExpanded = false;
     let selectedHistoryIds = new Set();
     let modalCtx = null; // { entries, index, imgBase, libId }
     const expandedLibraries = new Set();
@@ -1202,18 +1277,14 @@
           list.innerHTML = '<div class="history-empty">No history yet.</div>';
           return;
         }
-        // Group entries by calendar date (newest first, preserving server order)
-        const groups = [];
+        // Group entries by calendar date, then sort groups newest-first.
         const groupMap = new Map();
         for (const e of historyEntries) {
           const label = dateGroupLabel(e.timestamp);
-          if (!groupMap.has(label)) {
-            const g = { label, entries: [] };
-            groups.push(g);
-            groupMap.set(label, g);
-          }
+          if (!groupMap.has(label)) groupMap.set(label, { label, date: new Date(e.timestamp), entries: [] });
           groupMap.get(label).entries.push(e);
         }
+        const groups = [...groupMap.values()].sort((a, b) => b.date - a.date);
         list.innerHTML = groups.map(g => `
           <div>
             <div class="history-group-label">${escapeHtml(g.label)}</div>
@@ -1241,11 +1312,11 @@
     }
 
     async function deleteFromHistory(id) {
-      if (!confirm('Delete this history entry?')) return;
+      if (!confirm('Move this entry to Trash?')) return;
       try {
         await fetch(`/api/history/${id}`, { method: 'DELETE' });
         selectedHistoryIds.delete(id);
-        await refreshHistory();
+        await Promise.all([refreshHistory(), refreshTrash()]);
       } catch (err) {
         console.warn('History delete failed:', err);
       }
@@ -1356,16 +1427,16 @@
       if (!modalCtx) return;
       const e = modalCtx.entries[modalCtx.index];
       if (!e) return;
-      if (!confirm('Delete this entry?')) return;
+      if (!confirm('Move this entry to Trash?')) return;
       try {
         if (modalCtx.libId !== null) {
           await fetch(`/api/libraries/${modalCtx.libId}/entries/${e.id}`, { method: 'DELETE' });
           getLibSel(modalCtx.libId).delete(e.id);
-          await refreshLibraries();
+          await Promise.all([refreshLibraries(), refreshTrash()]);
         } else {
           await fetch(`/api/history/${e.id}`, { method: 'DELETE' });
           selectedHistoryIds.delete(e.id);
-          await refreshHistory();
+          await Promise.all([refreshHistory(), refreshTrash()]);
         }
         if (!modalCtx || modalCtx.entries.length === 0) {
           closeHistoryModal();
@@ -1441,13 +1512,13 @@
 
     async function bulkDelete() {
       if (!selectedHistoryIds.size) return;
-      if (!confirm(`Delete ${selectedHistoryIds.size} selected entr${selectedHistoryIds.size === 1 ? 'y' : 'ies'}?`)) return;
+      if (!confirm(`Move ${selectedHistoryIds.size} selected entr${selectedHistoryIds.size === 1 ? 'y' : 'ies'} to Trash?`)) return;
       for (const id of [...selectedHistoryIds]) {
         try { await fetch(`/api/history/${id}`, { method: 'DELETE' }); }
         catch (err) { console.warn('Bulk delete error:', err); }
       }
       selectedHistoryIds.clear();
-      await refreshHistory();
+      await Promise.all([refreshHistory(), refreshTrash()]);
     }
 
     async function bulkDownload() {
@@ -1648,13 +1719,13 @@
     async function libBulkDelete(libId) {
       const sel = getLibSel(libId);
       if (!sel.size) return;
-      if (!confirm(`Remove ${sel.size} selected entr${sel.size === 1 ? 'y' : 'ies'} from library?`)) return;
+      if (!confirm(`Move ${sel.size} selected entr${sel.size === 1 ? 'y' : 'ies'} to Trash?`)) return;
       for (const id of [...sel]) {
         try { await fetch(`/api/libraries/${libId}/entries/${id}`, { method: 'DELETE' }); }
         catch (err) { console.warn('Bulk lib delete error:', err); }
       }
       sel.clear();
-      await refreshLibraries();
+      await Promise.all([refreshLibraries(), refreshTrash()]);
     }
 
     async function libBulkDownload(libId) {
@@ -1705,21 +1776,23 @@
     }
 
     async function deleteLibraryEntry(libId, entryId) {
-      if (!confirm('Remove this entry from the library?')) return;
+      if (!confirm('Move this entry to Trash?')) return;
       try {
         await fetch(`/api/libraries/${libId}/entries/${entryId}`, { method: 'DELETE' });
         getLibSel(libId).delete(entryId);
-        await refreshLibraries();
+        await Promise.all([refreshLibraries(), refreshTrash()]);
       } catch (err) { console.warn('Library entry delete failed:', err); }
     }
 
     async function deleteLibrary(libId) {
       const lib = libraries.find(l => l.id === libId);
       if (!lib) return;
-      if (!confirm(`Delete library "${lib.name}" and all its images?`)) return;
+      const entryCount = (lib.entries || []).length;
+      const detail = entryCount > 0 ? ` All ${entryCount} image${entryCount === 1 ? '' : 's'} will be moved to Trash.` : '';
+      if (!confirm(`Delete library "${lib.name}"?${detail}`)) return;
       try {
         await fetch(`/api/libraries/${libId}`, { method: 'DELETE' });
-        await refreshLibraries();
+        await Promise.all([refreshLibraries(), refreshTrash()]);
       } catch (err) { console.warn('Library delete failed:', err); }
     }
 
@@ -2027,9 +2100,108 @@
     window.addEventListener('resize', updatePanelHeight);
     requestAnimationFrame(updatePanelHeight);
 
+    // ── Trash ─────────────────────────────────────────────────────────────────
+
+    function toggleTrashSection() {
+      trashExpanded = !trashExpanded;
+      document.getElementById('trashContent').style.display = trashExpanded ? '' : 'none';
+      document.getElementById('trashArrow').textContent = trashExpanded ? '▾' : '▸';
+    }
+
+    async function refreshTrash() {
+      try {
+        const res = await fetch('/api/trash');
+        trashEntries = await res.json();
+        renderTrashSection();
+      } catch (err) {
+        console.warn('Trash load failed:', err);
+      }
+    }
+
+    function trashDaysRemaining(deletedAt) {
+      const msRemaining = 30 * 24 * 60 * 60 * 1000 - (Date.now() - new Date(deletedAt).getTime());
+      return Math.max(0, Math.ceil(msRemaining / (24 * 60 * 60 * 1000)));
+    }
+
+    function renderTrashSection() {
+      const count = trashEntries.length;
+      const badge = document.getElementById('trashCountBadge');
+      const emptyBtn = document.getElementById('trashEmptyBtn');
+      badge.textContent = String(count);
+      badge.style.display = count > 0 ? '' : 'none';
+      emptyBtn.style.display = count > 0 ? '' : 'none';
+      const list = document.getElementById('trashList');
+      if (!count) {
+        list.innerHTML = '<div class="trash-empty-msg">Trash is empty.</div>';
+        return;
+      }
+      // Newest deletion first
+      const sorted = [...trashEntries].sort((a, b) => new Date(b.deletedAt) - new Date(a.deletedAt));
+      list.innerHTML = sorted.map(renderTrashCard).join('');
+    }
+
+    function renderTrashCard(e) {
+      const imgSrc = `/images/trash/${e.trashId}/${escapeHtml(e.filename || '')}`;
+      const daysLeft = trashDaysRemaining(e.deletedAt);
+      const sourceLabel = e.source === 'library' ? (e.libName || 'Library') : 'History';
+      const deletedDate = e.deletedAt ? new Date(e.deletedAt).toLocaleDateString() : '';
+      const urgentClass = daysLeft <= 3 ? ' urgent' : '';
+      return `
+        <div class="history-card" data-trash-id="${e.trashId}">
+          <img class="history-thumb" src="${imgSrc}" alt="" />
+          <div class="history-meta">
+            <div class="history-prompt">${escapeHtml(e.prompt || '')}</div>
+            ${e.negative_prompt ? `<div class="history-negative">− ${escapeHtml(e.negative_prompt)}</div>` : ''}
+            <div class="history-time">
+              Deleted ${escapeHtml(deletedDate)}
+              &nbsp;&middot;&nbsp; <span class="trash-source-badge">${escapeHtml(sourceLabel)}</span>
+              &nbsp; <span class="trash-days-badge${urgentClass}">${daysLeft}d left</span>
+            </div>
+          </div>
+          <div class="history-actions">
+            <button class="trash-restore-btn" onclick="restoreFromTrash(${e.trashId})" title="Restore to original location">Restore</button>
+            <button class="history-delete" onclick="permanentDeleteFromTrash(${e.trashId})" title="Delete permanently">&#x2715;</button>
+          </div>
+        </div>`;
+    }
+
+    async function restoreFromTrash(trashId) {
+      try {
+        const res = await fetch(`/api/trash/${trashId}/restore`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Restore failed');
+        await Promise.all([refreshTrash(), refreshHistory(), refreshLibraries()]);
+        setStatus(data.note || 'Restored successfully', 'success');
+      } catch (err) {
+        setStatus('Restore failed: ' + err.message, 'error');
+      }
+    }
+
+    async function permanentDeleteFromTrash(trashId) {
+      if (!confirm('Permanently delete this image? This cannot be undone.')) return;
+      try {
+        await fetch(`/api/trash/${trashId}`, { method: 'DELETE' });
+        await refreshTrash();
+      } catch (err) {
+        console.warn('Permanent delete failed:', err);
+      }
+    }
+
+    async function emptyTrash() {
+      if (!trashEntries.length) return;
+      if (!confirm(`Permanently delete all ${trashEntries.length} item${trashEntries.length === 1 ? '' : 's'} in Trash? This cannot be undone.`)) return;
+      try {
+        await fetch('/api/trash', { method: 'DELETE' });
+        await refreshTrash();
+      } catch (err) {
+        console.warn('Empty trash failed:', err);
+      }
+    }
+
     // Load history, libraries, and credits on page init
     refreshHistory();
     refreshLibraries();
+    refreshTrash();
     refreshCredits();
   </script>
 </body>
