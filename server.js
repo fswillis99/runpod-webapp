@@ -47,6 +47,34 @@ function makePngItxtChunk(keyword, text) {
   return Buffer.concat([len, type, data, crcBuf]);
 }
 
+// Read iTXt metadata chunks from a PNG buffer, returning keyword→text map
+function readPngItxtChunks(pngBuf) {
+  const meta = {};
+  if (pngBuf.length < 8) return meta;
+  let offset = 8; // skip PNG signature
+  while (offset + 12 <= pngBuf.length) {
+    const chunkLen = pngBuf.readUInt32BE(offset);
+    const chunkType = pngBuf.slice(offset + 4, offset + 8).toString("latin1");
+    if (chunkType === "IEND") break;
+    if (chunkType === "iTXt") {
+      const data = pngBuf.slice(offset + 8, offset + 8 + chunkLen);
+      let i = 0;
+      while (i < data.length && data[i] !== 0) i++;
+      const keyword = data.slice(0, i).toString("latin1");
+      // skip null + comp_flag + comp_method = 3 bytes, then language tag (null-terminated)
+      i += 3;
+      while (i < data.length && data[i] !== 0) i++;
+      i++; // skip null after language tag
+      // skip translated keyword (null-terminated)
+      while (i < data.length && data[i] !== 0) i++;
+      i++; // skip null after translated keyword
+      meta[keyword] = data.slice(i).toString("utf8");
+    }
+    offset += 12 + chunkLen;
+  }
+  return meta;
+}
+
 // Insert iTXt metadata chunks into a PNG buffer (before IEND)
 function addPngMetadata(pngBuf, metadata) {
   const iendPos = pngBuf.length - 12; // IEND is always the last 12 bytes
@@ -314,6 +342,77 @@ app.delete("/api/libraries/:libId/entries/:entryId", (req, res) => {
   if (entry?.filename) { const p = path.join(dir, entry.filename); if (fs.existsSync(p)) fs.unlinkSync(p); }
   for (const f of (entry?.input_images || [])) { const p = path.join(dir, f); if (fs.existsSync(p)) fs.unlinkSync(p); }
   res.json({ ok: true });
+});
+
+// Scan a library's directory for image files not already registered as entries,
+// read iTXt metadata to populate fields, and find associated input sidecars.
+const INPUT_SIDECAR_RE = /-in\d+\.(png|jpg|jpeg|webp)$/i;
+const IMAGE_EXT_RE = /\.(png|jpg|jpeg|webp)$/i;
+
+app.post("/api/libraries/:id/import", (req, res) => {
+  const libId = parseInt(req.params.id, 10);
+  const libs = loadLibraries();
+  const lib = libs.find(l => l.id === libId);
+  if (!lib) return res.status(404).json({ error: "library not found" });
+
+  const dir = libDir(lib);
+  if (!fs.existsSync(dir)) return res.json({ ok: true, imported: 0, skipped: 0 });
+
+  let allFiles;
+  try {
+    allFiles = fs.readdirSync(dir).filter(f => IMAGE_EXT_RE.test(f));
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+
+  const mainImages = allFiles.filter(f => !INPUT_SIDECAR_RE.test(f));
+  lib.entries = lib.entries || [];
+  const existing = new Set(lib.entries.map(e => e.filename));
+
+  let imported = 0;
+  let skipped = 0;
+
+  for (const filename of mainImages) {
+    if (existing.has(filename)) { skipped++; continue; }
+
+    let prompt = "", workflow_type = "", loras = [];
+    if (/\.png$/i.test(filename)) {
+      try {
+        const meta = readPngItxtChunks(fs.readFileSync(path.join(dir, filename)));
+        prompt = meta.prompt || "";
+        workflow_type = meta.workflow_type || "";
+        loras = meta.loras ? meta.loras.split(",").filter(Boolean) : [];
+      } catch {
+        // proceed with empty metadata
+      }
+    }
+
+    // Collect sidecar input files: {base}-in1.png, -in2.png, etc.
+    const base = filename.replace(/\.[^.]+$/, "");
+    const inputImages = [];
+    for (let n = 1; ; n++) {
+      const sidecar = allFiles.find(f => f === `${base}-in${n}.png` ||
+        f === `${base}-in${n}.jpg` || f === `${base}-in${n}.jpeg` || f === `${base}-in${n}.webp`);
+      if (!sidecar) break;
+      inputImages.push(sidecar);
+    }
+
+    const entry = {
+      id: Date.now() + imported,
+      timestamp: new Date().toISOString(),
+      filename,
+      prompt,
+      workflow_type,
+      loras,
+    };
+    if (inputImages.length) entry.input_images = inputImages;
+    lib.entries.unshift(entry);
+    existing.add(filename);
+    imported++;
+  }
+
+  if (imported > 0) saveLibraries(libs);
+  res.json({ ok: true, imported, skipped });
 });
 
 // ---------------------------------------------------------------------------
