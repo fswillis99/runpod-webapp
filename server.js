@@ -340,7 +340,7 @@ app.get("/api/history", (req, res) => {
 });
 
 app.post("/api/history", (req, res) => {
-  const { prompt, negative_prompt, workflow_type, loras, filename, image, input_images, timestamp } =
+  const { prompt, negative_prompt, workflow_type, loras, filename, image, input_images, timestamp, execution_time } =
     req.body;
   const id = Date.now();
   if (image && filename) {
@@ -367,7 +367,7 @@ app.post("/api/history", (req, res) => {
     }
   }
   const history = loadHistory();
-  const entry = { id, timestamp, prompt, negative_prompt, workflow_type, loras, filename };
+  const entry = { id, timestamp, prompt, negative_prompt, workflow_type, loras, filename, execution_time: execution_time ?? null };
   if (savedInputFiles.length > 0) entry.input_images = savedInputFiles;
   history.unshift(entry);
   if (history.length > MAX_HISTORY) history.splice(MAX_HISTORY);

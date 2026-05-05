@@ -425,6 +425,10 @@
       margin-top: auto;
       padding-top: 0.25rem;
     }
+    .history-time .exec-time {
+      color: #1a7f4e;
+      font-weight: 600;
+    }
 
     .history-actions { flex-shrink: 0; display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end; }
 
@@ -631,6 +635,11 @@
     .hm-meta {
       font-size: 0.75rem;
       color: #555;
+    }
+    .hm-exec-time {
+      font-size: 0.75rem;
+      color: #1a7f4e;
+      font-weight: 600;
     }
 
     .hm-loras { display: flex; flex-wrap: wrap; gap: 0.3rem; }
@@ -949,6 +958,7 @@
         <div class="hm-negative" id="hmNegative"></div>
         <div class="hm-loras" id="hmLoras"></div>
         <div class="hm-meta" id="hmMeta"></div>
+        <div class="hm-exec-time" id="hmExecTime" style="display:none"></div>
         <div class="hm-spacer"></div>
         <div class="hm-filename" id="hmFilename"></div>
         <div class="hm-actions">
@@ -1246,6 +1256,11 @@
       return d.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     }
 
+    function fmtExecTime(ms) {
+      if (ms === null || ms === undefined) return null;
+      return (ms / 1000).toFixed(1) + 's';
+    }
+
     function renderHistoryCard(e) {
       const sel = selectedHistoryIds.has(e.id);
       return `
@@ -1258,7 +1273,7 @@
             <div class="history-prompt">${escapeHtml(e.prompt)}</div>
             ${e.negative_prompt ? `<div class="history-negative">− ${escapeHtml(e.negative_prompt)}</div>` : ''}
             ${e.loras && e.loras.length ? `<div class="history-loras">${e.loras.map(l => `<span class="history-lora-pill">${escapeHtml(l)}</span>`).join('')}</div>` : ''}
-            <div class="history-time">${new Date(e.timestamp).toLocaleTimeString()}${e.workflow_type ? ` · ${escapeHtml(wfLabels[e.workflow_type] || e.workflow_type)}` : ''}</div>
+            <div class="history-time">${new Date(e.timestamp).toLocaleTimeString()}${e.workflow_type ? ` · ${escapeHtml(wfLabels[e.workflow_type] || e.workflow_type)}` : ''}${fmtExecTime(e.execution_time) ? ` · <span class="exec-time" title="Execution time">${fmtExecTime(e.execution_time)}</span>` : ''}</div>
           </div>
           <div class="history-actions">
             <button class="addlib-btn" onclick="event.stopPropagation(); openLibPickerForHistoryEntry(event, ${e.id})" title="Add to library">+ Lib</button>
@@ -1300,12 +1315,12 @@
       }
     }
 
-    async function saveToHistory({ prompt, negative_prompt, workflow_type, loras, filename, image, input_images }) {
+    async function saveToHistory({ prompt, negative_prompt, workflow_type, loras, filename, image, input_images, execution_time }) {
       try {
         await fetch('/api/history', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt, negative_prompt, workflow_type, loras, filename, image, input_images, timestamp: new Date().toISOString() }),
+          body: JSON.stringify({ prompt, negative_prompt, workflow_type, loras, filename, image, input_images, timestamp: new Date().toISOString(), execution_time }),
         });
         await refreshHistory();
       } catch (err) {
@@ -1387,6 +1402,14 @@
       const time = e.timestamp ? new Date(e.timestamp).toLocaleString() : '';
       const wf = e.workflow_type ? (wfLabels[e.workflow_type] || e.workflow_type) : '';
       document.getElementById('hmMeta').textContent = [time, wf].filter(Boolean).join(' · ');
+      const execStr = fmtExecTime(e.execution_time);
+      const execEl = document.getElementById('hmExecTime');
+      if (execStr) {
+        execEl.textContent = `Execution time: ${execStr}`;
+        execEl.style.display = '';
+      } else {
+        execEl.style.display = 'none';
+      }
       document.getElementById('hmFilename').textContent = e.filename || '';
       const dl = document.getElementById('hmDownload');
       dl.href = `${modalCtx.imgBase}${e.filename || ''}`;
@@ -1644,7 +1667,7 @@
             <div class="history-prompt">${escapeHtml(e.prompt || '')}</div>
             ${e.negative_prompt ? `<div class="history-negative">− ${escapeHtml(e.negative_prompt)}</div>` : ''}
             ${e.loras && e.loras.length ? `<div class="history-loras">${e.loras.map(l => `<span class="history-lora-pill">${escapeHtml(l)}</span>`).join('')}</div>` : ''}
-            <div class="history-time">${e.timestamp ? new Date(e.timestamp).toLocaleTimeString() : ''}${e.workflow_type ? ` · ${escapeHtml(wfLabels[e.workflow_type] || e.workflow_type)}` : ''}</div>
+            <div class="history-time">${e.timestamp ? new Date(e.timestamp).toLocaleTimeString() : ''}${e.workflow_type ? ` · ${escapeHtml(wfLabels[e.workflow_type] || e.workflow_type)}` : ''}${fmtExecTime(e.execution_time) ? ` · <span class="exec-time" title="Execution time">${fmtExecTime(e.execution_time)}</span>` : ''}</div>
           </div>
           <div class="history-actions">
             <button class="addlib-btn" onclick="event.stopPropagation(); openLibPickerForLibEntry(event, ${libId}, ${e.id})" title="Copy to library">Copy</button>
@@ -2017,7 +2040,8 @@
             const imageEntry = data.output?.images?.[0];
             if (!imageEntry?.data) throw new Error('No image in response');
             showImage(imageEntry.data, imageEntry.filename);
-            setStatus('Done!', 'success');
+            const execMs = typeof data.executionTime === 'number' ? data.executionTime : null;
+            setStatus(`Done!${execMs !== null ? ` (${(execMs / 1000).toFixed(1)}s)` : ''}`, 'success');
             await saveToHistory({
               prompt: params.prompt,
               negative_prompt: params.negative_prompt,
@@ -2026,6 +2050,7 @@
               filename: imageEntry.filename,
               image: imageEntry.data,
               input_images: params.images || [],
+              execution_time: execMs,
             });
             refreshCredits();
             finishJob();
