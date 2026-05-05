@@ -425,6 +425,10 @@
       margin-top: auto;
       padding-top: 0.25rem;
     }
+    .history-time .exec-time {
+      color: #1a7f4e;
+      font-weight: 600;
+    }
 
     .history-actions { flex-shrink: 0; display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end; }
 
@@ -632,6 +636,11 @@
       font-size: 0.75rem;
       color: #555;
     }
+    .hm-exec-time {
+      font-size: 0.75rem;
+      color: #1a7f4e;
+      font-weight: 600;
+    }
 
     .hm-loras { display: flex; flex-wrap: wrap; gap: 0.3rem; }
     .hm-lora-pill {
@@ -797,9 +806,70 @@
     }
     .trash-restore-btn:hover { border-color: #4ade80; background: rgba(74,222,128,0.08); color: #fff; }
     .trash-header-controls { display: flex; align-items: center; gap: 0.75rem; }
+
+    /* ── Exec time stats section ── */
+    .stats-section { width: 100%; max-width: 1100px; margin-top: 3rem; }
+    .stats-header {
+      font-size: 0.75rem; font-weight: 600; color: #555;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      margin-bottom: 0; padding-bottom: 0.6rem;
+      border-bottom: 1px solid #222;
+      display: flex; align-items: center; gap: 0.5rem;
+      cursor: pointer; user-select: none;
+    }
+    .stats-header:hover .stats-title { color: #888; }
+    .stats-toggle-arrow { font-size: 0.7rem; color: #555; flex-shrink: 0; }
+    .stats-title { transition: color 0.15s; }
+    .stats-content { padding-top: 1rem; }
+    .stats-tables { display: flex; gap: 3rem; flex-wrap: wrap; }
+    .stats-table-wrap { flex: 1; min-width: 220px; }
+    .stats-table-title {
+      font-size: 0.7rem; font-weight: 600; color: #555;
+      letter-spacing: 0.07em; text-transform: uppercase;
+      margin-bottom: 0.5rem;
+    }
+    .stats-table {
+      width: 100%; border-collapse: collapse; font-size: 0.8rem;
+    }
+    .stats-table th {
+      text-align: left; padding: 0.2rem 0.5rem 0.2rem 0;
+      color: #444; font-weight: 500; font-size: 0.72rem;
+      border-bottom: 1px solid #222;
+    }
+    .stats-table th:last-child { text-align: right; }
+    .stats-table td {
+      padding: 0.3rem 0.5rem 0.3rem 0;
+      color: #888; border-bottom: 1px solid #1a1a1a;
+    }
+    .stats-table td:last-child { text-align: right; color: #1a7f4e; font-weight: 600; }
+    .stats-table td:nth-child(2) { color: #555; }
+    .stats-empty { color: #333; font-size: 0.82rem; padding: 0.4rem 0; }
+    .stats-tz-hint { font-size: 0.68rem; font-weight: 400; color: #3a3a3a; text-transform: none; letter-spacing: 0; }
+
+    /* ── Reload banner ── */
+    #reloadBanner {
+      display: none;
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      background: #1a3a1a; border-bottom: 1px solid #2a6a2a;
+      color: #4ade80; font-size: 0.82rem;
+      padding: 0.55rem 1rem;
+      display: none; align-items: center; justify-content: center; gap: 1rem;
+    }
+    #reloadBanner button {
+      padding: 0.25rem 0.75rem; border: 1px solid #4ade80; border-radius: 5px;
+      background: transparent; color: #4ade80; font-size: 0.78rem;
+      cursor: pointer; width: auto;
+      transition: background 0.15s, color 0.15s;
+    }
+    #reloadBanner button:hover { background: #4ade80; color: #000; }
   </style>
 </head>
 <body>
+  <div id="reloadBanner">
+    Server has been updated &mdash; reload to get the latest version.
+    <button onclick="location.reload()">Reload</button>
+    <button onclick="this.closest('#reloadBanner').style.display='none'" title="Dismiss">&#x2715;</button>
+  </div>
   <div class="titlebar">
     <h1>RunPod Image Generator</h1>
     <div class="credits" id="creditsDisplay">Credits: …</div>
@@ -949,6 +1019,7 @@
         <div class="hm-negative" id="hmNegative"></div>
         <div class="hm-loras" id="hmLoras"></div>
         <div class="hm-meta" id="hmMeta"></div>
+        <div class="hm-exec-time" id="hmExecTime" style="display:none"></div>
         <div class="hm-spacer"></div>
         <div class="hm-filename" id="hmFilename"></div>
         <div class="hm-actions">
@@ -1001,6 +1072,27 @@
     </div>
     <div class="history-list" id="historyList">
       <div class="history-empty">No history yet.</div>
+    </div>
+  </div>
+
+  <!-- Execution time stats -->
+  <div class="stats-section">
+    <div class="stats-header" onclick="toggleStatsSection()">
+      <span class="stats-toggle-arrow" id="statsArrow">▸</span>
+      <span class="stats-title">Execution Time</span>
+      <span class="stats-tz-hint" id="statsTzHint"></span>
+    </div>
+    <div class="stats-content" id="statsContent" style="display:none">
+      <div class="stats-tables">
+        <div class="stats-table-wrap">
+          <div class="stats-table-title">By Day</div>
+          <div id="statsByDay"></div>
+        </div>
+        <div class="stats-table-wrap">
+          <div class="stats-table-title">By Hour</div>
+          <div id="statsByHour"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1246,6 +1338,11 @@
       return d.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     }
 
+    function fmtExecTime(ms) {
+      if (ms === null || ms === undefined) return null;
+      return (ms / 1000).toFixed(1) + 's';
+    }
+
     function renderHistoryCard(e) {
       const sel = selectedHistoryIds.has(e.id);
       return `
@@ -1258,7 +1355,7 @@
             <div class="history-prompt">${escapeHtml(e.prompt)}</div>
             ${e.negative_prompt ? `<div class="history-negative">− ${escapeHtml(e.negative_prompt)}</div>` : ''}
             ${e.loras && e.loras.length ? `<div class="history-loras">${e.loras.map(l => `<span class="history-lora-pill">${escapeHtml(l)}</span>`).join('')}</div>` : ''}
-            <div class="history-time">${new Date(e.timestamp).toLocaleTimeString()}${e.workflow_type ? ` · ${escapeHtml(wfLabels[e.workflow_type] || e.workflow_type)}` : ''}</div>
+            <div class="history-time">${new Date(e.timestamp).toLocaleTimeString()}${e.workflow_type ? ` · ${escapeHtml(wfLabels[e.workflow_type] || e.workflow_type)}` : ''}${fmtExecTime(e.execution_time) ? ` · <span class="exec-time" title="Execution time">${fmtExecTime(e.execution_time)}</span>` : ''}</div>
           </div>
           <div class="history-actions">
             <button class="addlib-btn" onclick="event.stopPropagation(); openLibPickerForHistoryEntry(event, ${e.id})" title="Add to library">+ Lib</button>
@@ -1300,12 +1397,12 @@
       }
     }
 
-    async function saveToHistory({ prompt, negative_prompt, workflow_type, loras, filename, image, input_images }) {
+    async function saveToHistory({ prompt, negative_prompt, workflow_type, loras, filename, image, input_images, execution_time }) {
       try {
         await fetch('/api/history', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt, negative_prompt, workflow_type, loras, filename, image, input_images, timestamp: new Date().toISOString() }),
+          body: JSON.stringify({ prompt, negative_prompt, workflow_type, loras, filename, image, input_images, timestamp: new Date().toISOString(), execution_time }),
         });
         await refreshHistory();
       } catch (err) {
@@ -1387,6 +1484,14 @@
       const time = e.timestamp ? new Date(e.timestamp).toLocaleString() : '';
       const wf = e.workflow_type ? (wfLabels[e.workflow_type] || e.workflow_type) : '';
       document.getElementById('hmMeta').textContent = [time, wf].filter(Boolean).join(' · ');
+      const execStr = fmtExecTime(e.execution_time);
+      const execEl = document.getElementById('hmExecTime');
+      if (execStr) {
+        execEl.textContent = `Execution time: ${execStr}`;
+        execEl.style.display = '';
+      } else {
+        execEl.style.display = 'none';
+      }
       document.getElementById('hmFilename').textContent = e.filename || '';
       const dl = document.getElementById('hmDownload');
       dl.href = `${modalCtx.imgBase}${e.filename || ''}`;
@@ -1644,7 +1749,7 @@
             <div class="history-prompt">${escapeHtml(e.prompt || '')}</div>
             ${e.negative_prompt ? `<div class="history-negative">− ${escapeHtml(e.negative_prompt)}</div>` : ''}
             ${e.loras && e.loras.length ? `<div class="history-loras">${e.loras.map(l => `<span class="history-lora-pill">${escapeHtml(l)}</span>`).join('')}</div>` : ''}
-            <div class="history-time">${e.timestamp ? new Date(e.timestamp).toLocaleTimeString() : ''}${e.workflow_type ? ` · ${escapeHtml(wfLabels[e.workflow_type] || e.workflow_type)}` : ''}</div>
+            <div class="history-time">${e.timestamp ? new Date(e.timestamp).toLocaleTimeString() : ''}${e.workflow_type ? ` · ${escapeHtml(wfLabels[e.workflow_type] || e.workflow_type)}` : ''}${fmtExecTime(e.execution_time) ? ` · <span class="exec-time" title="Execution time">${fmtExecTime(e.execution_time)}</span>` : ''}</div>
           </div>
           <div class="history-actions">
             <button class="addlib-btn" onclick="event.stopPropagation(); openLibPickerForLibEntry(event, ${libId}, ${e.id})" title="Copy to library">Copy</button>
@@ -2017,7 +2122,9 @@
             const imageEntry = data.output?.images?.[0];
             if (!imageEntry?.data) throw new Error('No image in response');
             showImage(imageEntry.data, imageEntry.filename);
-            setStatus('Done!', 'success');
+            const execMs = typeof data.executionTime === 'number' ? data.executionTime : null;
+            setStatus(`Done!${execMs !== null ? ` (${(execMs / 1000).toFixed(1)}s)` : ''}`, 'success');
+            const jobTimestamp = new Date().toISOString();
             await saveToHistory({
               prompt: params.prompt,
               negative_prompt: params.negative_prompt,
@@ -2026,7 +2133,16 @@
               filename: imageEntry.filename,
               image: imageEntry.data,
               input_images: params.images || [],
+              execution_time: execMs,
             });
+            if (execMs !== null) {
+              fetch('/api/execution-times', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ timestamp: jobTimestamp, execution_time: execMs, workflow_type: params.workflowType }),
+              }).then(() => { if (statsExpanded) renderExecStats(); })
+                .catch(err => console.warn('Exec time save failed:', err));
+            }
             refreshCredits();
             finishJob();
           } else if (status === 'FAILED') {
@@ -2101,6 +2217,93 @@
         handleImageFile(target === -1 ? 0 : target, blob, 'Pasted image');
       });
     })();
+
+    // ── Execution time stats ──────────────────────────────────────────────────
+
+    let statsExpanded = false;
+
+    function toggleStatsSection() {
+      statsExpanded = !statsExpanded;
+      document.getElementById('statsContent').style.display = statsExpanded ? '' : 'none';
+      document.getElementById('statsArrow').textContent = statsExpanded ? '▾' : '▸';
+      if (statsExpanded) renderExecStats();
+    }
+
+    async function renderExecStats() {
+      let entries;
+      try {
+        const res = await fetch('/api/execution-times');
+        entries = await res.json();
+      } catch (err) {
+        console.warn('Exec times load failed:', err);
+        entries = [];
+      }
+
+      // ── By Day ──────────────────────────────────────────────────────────────
+      // Key by local calendar date so rows align with the user's clock.
+      const dayMap = new Map();
+      for (const e of entries) {
+        const d = new Date(e.timestamp);
+        const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        if (!dayMap.has(key)) {
+          dayMap.set(key, { label: dateGroupLabel(e.timestamp), totalMs: 0, count: 0 });
+        }
+        const b = dayMap.get(key);
+        b.totalMs += e.execution_time;
+        b.count++;
+      }
+      const dayRows = [...dayMap.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+
+      const dayEl = document.getElementById('statsByDay');
+      if (!dayRows.length) {
+        dayEl.innerHTML = '<div class="stats-empty">No data yet.</div>';
+      } else {
+        dayEl.innerHTML = `<table class="stats-table">
+          <thead><tr><th>Date</th><th>Images</th><th>Total time</th></tr></thead>
+          <tbody>${dayRows.map(([, b]) => `
+            <tr>
+              <td>${escapeHtml(b.label)}</td>
+              <td>${b.count}</td>
+              <td>${fmtExecTime(b.totalMs)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>`;
+      }
+
+      // ── By Hour ─────────────────────────────────────────────────────────────
+      // Key by local calendar date + hour so rows align with the user's clock.
+      const hourMap = new Map();
+      for (const e of entries) {
+        const d = new Date(e.timestamp);
+        const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}`;
+        if (!hourMap.has(key)) {
+          const label = d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', hour12: true });
+          hourMap.set(key, { label, totalMs: 0, count: 0 });
+        }
+        const b = hourMap.get(key);
+        b.totalMs += e.execution_time;
+        b.count++;
+      }
+      const hourRows = [...hourMap.entries()]
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .slice(0, 48);
+
+      const hourEl = document.getElementById('statsByHour');
+      if (!hourRows.length) {
+        hourEl.innerHTML = '<div class="stats-empty">No data yet.</div>';
+      } else {
+        hourEl.innerHTML = `<table class="stats-table">
+          <thead><tr><th>Hour</th><th>Images</th><th>Total time</th></tr></thead>
+          <tbody>${hourRows.map(([, b]) => `
+            <tr>
+              <td>${escapeHtml(b.label)}</td>
+              <td>${b.count}</td>
+              <td>${fmtExecTime(b.totalMs)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>`;
+      }
+    }
 
     // ── Trash ─────────────────────────────────────────────────────────────────
 
@@ -2201,11 +2404,31 @@
     }
 
 
+    // Poll /api/ping every 30s; show reload banner if startedAt changes.
+    (() => {
+      let knownStart = null;
+      async function checkPing() {
+        try {
+          const data = await fetch('/api/ping').then(r => r.json());
+          if (knownStart === null) { knownStart = data.startedAt; return; }
+          if (data.startedAt !== knownStart) {
+            document.getElementById('reloadBanner').style.display = 'flex';
+          }
+        } catch { /* server unreachable — ignore until it comes back */ }
+      }
+      checkPing();
+      setInterval(checkPing, 30_000);
+    })();
+
     // Load history, libraries, and credits on page init
     refreshHistory();
     refreshLibraries();
     refreshTrash();
     refreshCredits();
+
+    // Show local timezone in the execution time stats header
+    document.getElementById('statsTzHint').textContent =
+      Intl.DateTimeFormat().resolvedOptions().timeZone;
   </script>
 </body>
 </html>
