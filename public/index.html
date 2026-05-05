@@ -845,9 +845,31 @@
     .stats-table td:nth-child(2) { color: #555; }
     .stats-empty { color: #333; font-size: 0.82rem; padding: 0.4rem 0; }
     .stats-tz-hint { font-size: 0.68rem; font-weight: 400; color: #3a3a3a; text-transform: none; letter-spacing: 0; }
+
+    /* ── Reload banner ── */
+    #reloadBanner {
+      display: none;
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      background: #1a3a1a; border-bottom: 1px solid #2a6a2a;
+      color: #4ade80; font-size: 0.82rem;
+      padding: 0.55rem 1rem;
+      display: none; align-items: center; justify-content: center; gap: 1rem;
+    }
+    #reloadBanner button {
+      padding: 0.25rem 0.75rem; border: 1px solid #4ade80; border-radius: 5px;
+      background: transparent; color: #4ade80; font-size: 0.78rem;
+      cursor: pointer; width: auto;
+      transition: background 0.15s, color 0.15s;
+    }
+    #reloadBanner button:hover { background: #4ade80; color: #000; }
   </style>
 </head>
 <body>
+  <div id="reloadBanner">
+    Server has been updated &mdash; reload to get the latest version.
+    <button onclick="location.reload()">Reload</button>
+    <button onclick="this.closest('#reloadBanner').style.display='none'" title="Dismiss">&#x2715;</button>
+  </div>
   <div class="titlebar">
     <h1>RunPod Image Generator</h1>
     <div class="credits" id="creditsDisplay">Credits: …</div>
@@ -2381,6 +2403,22 @@
       }
     }
 
+
+    // Poll /api/ping every 30s; show reload banner if startedAt changes.
+    (() => {
+      let knownStart = null;
+      async function checkPing() {
+        try {
+          const data = await fetch('/api/ping').then(r => r.json());
+          if (knownStart === null) { knownStart = data.startedAt; return; }
+          if (data.startedAt !== knownStart) {
+            document.getElementById('reloadBanner').style.display = 'flex';
+          }
+        } catch { /* server unreachable — ignore until it comes back */ }
+      }
+      checkPing();
+      setInterval(checkPing, 30_000);
+    })();
 
     // Load history, libraries, and credits on page init
     refreshHistory();

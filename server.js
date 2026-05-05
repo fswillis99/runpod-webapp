@@ -924,6 +924,9 @@ app.get("/api/status/:jobId", async (req, res) => {
   }
 });
 
+const SERVER_START = Date.now();
+app.get("/api/ping", (req, res) => res.json({ startedAt: SERVER_START }));
+
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || "127.0.0.1";
 const listenHost = HOST === "IP_ADDR_ANY" ? undefined : HOST;
