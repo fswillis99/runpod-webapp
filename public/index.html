@@ -806,6 +806,44 @@
     }
     .trash-restore-btn:hover { border-color: #4ade80; background: rgba(74,222,128,0.08); color: #fff; }
     .trash-header-controls { display: flex; align-items: center; gap: 0.75rem; }
+
+    /* ── Exec time stats section ── */
+    .stats-section { width: 100%; max-width: 1100px; margin-top: 3rem; }
+    .stats-header {
+      font-size: 0.75rem; font-weight: 600; color: #555;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      margin-bottom: 0; padding-bottom: 0.6rem;
+      border-bottom: 1px solid #222;
+      display: flex; align-items: center; gap: 0.5rem;
+      cursor: pointer; user-select: none;
+    }
+    .stats-header:hover .stats-title { color: #888; }
+    .stats-toggle-arrow { font-size: 0.7rem; color: #555; flex-shrink: 0; }
+    .stats-title { transition: color 0.15s; }
+    .stats-content { padding-top: 1rem; display: none; }
+    .stats-tables { display: flex; gap: 3rem; flex-wrap: wrap; }
+    .stats-table-wrap { flex: 1; min-width: 220px; }
+    .stats-table-title {
+      font-size: 0.7rem; font-weight: 600; color: #555;
+      letter-spacing: 0.07em; text-transform: uppercase;
+      margin-bottom: 0.5rem;
+    }
+    .stats-table {
+      width: 100%; border-collapse: collapse; font-size: 0.8rem;
+    }
+    .stats-table th {
+      text-align: left; padding: 0.2rem 0.5rem 0.2rem 0;
+      color: #444; font-weight: 500; font-size: 0.72rem;
+      border-bottom: 1px solid #222;
+    }
+    .stats-table th:last-child { text-align: right; }
+    .stats-table td {
+      padding: 0.3rem 0.5rem 0.3rem 0;
+      color: #888; border-bottom: 1px solid #1a1a1a;
+    }
+    .stats-table td:last-child { text-align: right; color: #1a7f4e; font-weight: 600; }
+    .stats-table td:nth-child(2) { color: #555; }
+    .stats-empty { color: #333; font-size: 0.82rem; padding: 0.4rem 0; }
   </style>
 </head>
 <body>
@@ -1011,6 +1049,26 @@
     </div>
     <div class="history-list" id="historyList">
       <div class="history-empty">No history yet.</div>
+    </div>
+  </div>
+
+  <!-- Execution time stats -->
+  <div class="stats-section">
+    <div class="stats-header" onclick="toggleStatsSection()">
+      <span class="stats-toggle-arrow" id="statsArrow">▸</span>
+      <span class="stats-title">Execution Time</span>
+    </div>
+    <div class="stats-content" id="statsContent">
+      <div class="stats-tables">
+        <div class="stats-table-wrap">
+          <div class="stats-table-title">By Day</div>
+          <div id="statsByDay"></div>
+        </div>
+        <div class="stats-table-wrap">
+          <div class="stats-table-title">By Hour</div>
+          <div id="statsByHour"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1310,6 +1368,7 @@
         `).join('');
         updateSelectionUI();
         if (modalCtx && modalCtx.libId === null) modalCtx.entries = historyEntries;
+        if (statsExpanded) renderExecStats();
       } catch (err) {
         console.warn('History load failed:', err);
       }
@@ -2126,6 +2185,89 @@
         handleImageFile(target === -1 ? 0 : target, blob, 'Pasted image');
       });
     })();
+
+    // ── Execution time stats ──────────────────────────────────────────────────
+
+    let statsExpanded = false;
+
+    function toggleStatsSection() {
+      statsExpanded = !statsExpanded;
+      document.getElementById('statsContent').style.display = statsExpanded ? '' : 'none';
+      document.getElementById('statsArrow').textContent = statsExpanded ? '▾' : '▸';
+      if (statsExpanded) renderExecStats();
+    }
+
+    function renderExecStats() {
+      const entries = historyEntries.filter(e => e.execution_time != null);
+
+      // ── By Day ──────────────────────────────────────────────────────────────
+      const dayMap = new Map(); // "YYYY-MM-DD" -> { label, totalMs, count }
+      for (const e of entries) {
+        const d = new Date(e.timestamp);
+        const key = d.toISOString().slice(0, 10);
+        if (!dayMap.has(key)) {
+          dayMap.set(key, { label: dateGroupLabel(e.timestamp), totalMs: 0, count: 0 });
+        }
+        const bucket = dayMap.get(key);
+        bucket.totalMs += e.execution_time;
+        bucket.count++;
+      }
+      const dayRows = [...dayMap.entries()]
+        .sort((a, b) => b[0].localeCompare(a[0]));
+
+      const dayEl = document.getElementById('statsByDay');
+      if (!dayRows.length) {
+        dayEl.innerHTML = '<div class="stats-empty">No data yet.</div>';
+      } else {
+        dayEl.innerHTML = `<table class="stats-table">
+          <thead><tr><th>Date</th><th>Images</th><th>Total time</th></tr></thead>
+          <tbody>${dayRows.map(([, b]) => `
+            <tr>
+              <td>${escapeHtml(b.label)}</td>
+              <td>${b.count}</td>
+              <td>${fmtExecTime(b.totalMs)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>`;
+      }
+
+      // ── By Hour ─────────────────────────────────────────────────────────────
+      // Bucket each entry into its local calendar hour ("YYYY-MM-DD HH").
+      const hourMap = new Map();
+      for (const e of entries) {
+        const d = new Date(e.timestamp);
+        const key = d.toISOString().slice(0, 13); // "YYYY-MM-DDTHH"
+        if (!hourMap.has(key)) {
+          const label = d.toLocaleString(undefined, {
+            month: 'short', day: 'numeric',
+            hour: 'numeric', hour12: true,
+          });
+          hourMap.set(key, { label, totalMs: 0, count: 0 });
+        }
+        const bucket = hourMap.get(key);
+        bucket.totalMs += e.execution_time;
+        bucket.count++;
+      }
+      const hourRows = [...hourMap.entries()]
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .slice(0, 48); // cap at 48 hours of history
+
+      const hourEl = document.getElementById('statsByHour');
+      if (!hourRows.length) {
+        hourEl.innerHTML = '<div class="stats-empty">No data yet.</div>';
+      } else {
+        hourEl.innerHTML = `<table class="stats-table">
+          <thead><tr><th>Hour</th><th>Images</th><th>Total time</th></tr></thead>
+          <tbody>${hourRows.map(([, b]) => `
+            <tr>
+              <td>${escapeHtml(b.label)}</td>
+              <td>${b.count}</td>
+              <td>${fmtExecTime(b.totalMs)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>`;
+      }
+    }
 
     // ── Trash ─────────────────────────────────────────────────────────────────
 
