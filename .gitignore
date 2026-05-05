@@ -3,6 +3,7 @@ node_modules/
 history.json
 libraries.json
 trash.json
+execution_times.json
 .claude/worktrees
 images
 .DS_Store
