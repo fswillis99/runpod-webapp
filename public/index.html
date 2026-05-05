@@ -844,6 +844,7 @@
     .stats-table td:last-child { text-align: right; color: #1a7f4e; font-weight: 600; }
     .stats-table td:nth-child(2) { color: #555; }
     .stats-empty { color: #333; font-size: 0.82rem; padding: 0.4rem 0; }
+    .stats-tz-hint { font-size: 0.68rem; font-weight: 400; color: #3a3a3a; text-transform: none; letter-spacing: 0; }
   </style>
 </head>
 <body>
@@ -1057,6 +1058,7 @@
     <div class="stats-header" onclick="toggleStatsSection()">
       <span class="stats-toggle-arrow" id="statsArrow">▸</span>
       <span class="stats-title">Execution Time</span>
+      <span class="stats-tz-hint" id="statsTzHint"></span>
     </div>
     <div class="stats-content" id="statsContent" style="display:none">
       <div class="stats-tables">
@@ -1368,7 +1370,6 @@
         `).join('');
         updateSelectionUI();
         if (modalCtx && modalCtx.libId === null) modalCtx.entries = historyEntries;
-        if (statsExpanded) renderExecStats();
       } catch (err) {
         console.warn('History load failed:', err);
       }
@@ -2101,6 +2102,7 @@
             showImage(imageEntry.data, imageEntry.filename);
             const execMs = typeof data.executionTime === 'number' ? data.executionTime : null;
             setStatus(`Done!${execMs !== null ? ` (${(execMs / 1000).toFixed(1)}s)` : ''}`, 'success');
+            const jobTimestamp = new Date().toISOString();
             await saveToHistory({
               prompt: params.prompt,
               negative_prompt: params.negative_prompt,
@@ -2111,6 +2113,14 @@
               input_images: params.images || [],
               execution_time: execMs,
             });
+            if (execMs !== null) {
+              fetch('/api/execution-times', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ timestamp: jobTimestamp, execution_time: execMs, workflow_type: params.workflowType }),
+              }).then(() => { if (statsExpanded) renderExecStats(); })
+                .catch(err => console.warn('Exec time save failed:', err));
+            }
             refreshCredits();
             finishJob();
           } else if (status === 'FAILED') {
@@ -2197,23 +2207,30 @@
       if (statsExpanded) renderExecStats();
     }
 
-    function renderExecStats() {
-      const entries = historyEntries.filter(e => e.execution_time != null);
+    async function renderExecStats() {
+      let entries;
+      try {
+        const res = await fetch('/api/execution-times');
+        entries = await res.json();
+      } catch (err) {
+        console.warn('Exec times load failed:', err);
+        entries = [];
+      }
 
       // ── By Day ──────────────────────────────────────────────────────────────
-      const dayMap = new Map(); // "YYYY-MM-DD" -> { label, totalMs, count }
+      // Key by local calendar date so rows align with the user's clock.
+      const dayMap = new Map();
       for (const e of entries) {
         const d = new Date(e.timestamp);
-        const key = d.toISOString().slice(0, 10);
+        const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
         if (!dayMap.has(key)) {
           dayMap.set(key, { label: dateGroupLabel(e.timestamp), totalMs: 0, count: 0 });
         }
-        const bucket = dayMap.get(key);
-        bucket.totalMs += e.execution_time;
-        bucket.count++;
+        const b = dayMap.get(key);
+        b.totalMs += e.execution_time;
+        b.count++;
       }
-      const dayRows = [...dayMap.entries()]
-        .sort((a, b) => b[0].localeCompare(a[0]));
+      const dayRows = [...dayMap.entries()].sort((a, b) => b[0].localeCompare(a[0]));
 
       const dayEl = document.getElementById('statsByDay');
       if (!dayRows.length) {
@@ -2232,25 +2249,22 @@
       }
 
       // ── By Hour ─────────────────────────────────────────────────────────────
-      // Bucket each entry into its local calendar hour ("YYYY-MM-DD HH").
+      // Key by local calendar date + hour so rows align with the user's clock.
       const hourMap = new Map();
       for (const e of entries) {
         const d = new Date(e.timestamp);
-        const key = d.toISOString().slice(0, 13); // "YYYY-MM-DDTHH"
+        const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}`;
         if (!hourMap.has(key)) {
-          const label = d.toLocaleString(undefined, {
-            month: 'short', day: 'numeric',
-            hour: 'numeric', hour12: true,
-          });
+          const label = d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', hour12: true });
           hourMap.set(key, { label, totalMs: 0, count: 0 });
         }
-        const bucket = hourMap.get(key);
-        bucket.totalMs += e.execution_time;
-        bucket.count++;
+        const b = hourMap.get(key);
+        b.totalMs += e.execution_time;
+        b.count++;
       }
       const hourRows = [...hourMap.entries()]
         .sort((a, b) => b[0].localeCompare(a[0]))
-        .slice(0, 48); // cap at 48 hours of history
+        .slice(0, 48);
 
       const hourEl = document.getElementById('statsByHour');
       if (!hourRows.length) {
@@ -2373,6 +2387,10 @@
     refreshLibraries();
     refreshTrash();
     refreshCredits();
+
+    // Show local timezone in the execution time stats header
+    document.getElementById('statsTzHint').textContent =
+      Intl.DateTimeFormat().resolvedOptions().timeZone;
   </script>
 </body>
 </html>

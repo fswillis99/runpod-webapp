@@ -203,6 +203,56 @@ function migrateHistory() {
 migrateHistory();
 
 // ---------------------------------------------------------------------------
+// Execution times (persisted separately, 60-day retention)
+// ---------------------------------------------------------------------------
+const EXEC_TIMES_FILE = path.join(__dirname, "execution_times.json");
+const EXEC_TIMES_RETENTION_MS = 60 * 24 * 60 * 60 * 1000;
+
+function loadExecTimes() {
+  try { return JSON.parse(fs.readFileSync(EXEC_TIMES_FILE, "utf8")); }
+  catch { return []; }
+}
+
+function saveExecTimes(times) {
+  fs.writeFileSync(EXEC_TIMES_FILE, JSON.stringify(times));
+}
+
+function pruneExecTimes() {
+  const times = loadExecTimes();
+  const cutoff = new Date(Date.now() - EXEC_TIMES_RETENTION_MS).toISOString();
+  const kept = times.filter(t => t.timestamp >= cutoff);
+  if (kept.length !== times.length) saveExecTimes(kept);
+}
+
+// Seed from history entries that already have execution_time recorded.
+function migrateExecTimes() {
+  if (fs.existsSync(EXEC_TIMES_FILE)) return;
+  const history = loadHistory();
+  const times = history
+    .filter(e => e.execution_time != null)
+    .map(e => ({ id: e.id, timestamp: e.timestamp, execution_time: e.execution_time, workflow_type: e.workflow_type || null }));
+  saveExecTimes(times);
+}
+
+migrateExecTimes();
+pruneExecTimes();
+
+app.get("/api/execution-times", (req, res) => {
+  res.json(loadExecTimes());
+});
+
+app.post("/api/execution-times", (req, res) => {
+  const { timestamp, execution_time, workflow_type } = req.body;
+  if (execution_time == null || !timestamp) return res.status(400).json({ error: "missing fields" });
+  const times = loadExecTimes();
+  times.unshift({ id: Date.now(), timestamp, execution_time, workflow_type: workflow_type || null });
+  const cutoff = new Date(Date.now() - EXEC_TIMES_RETENTION_MS).toISOString();
+  const pruned = times.filter(t => t.timestamp >= cutoff);
+  saveExecTimes(pruned);
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
 // Trash
 // ---------------------------------------------------------------------------
 const TRASH_FILE = path.join(__dirname, "trash.json");
