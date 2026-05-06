@@ -1169,11 +1169,31 @@
 
     // Queue state
     let isProcessing = false;
-    let activeJobCount = 0;
+    const slotActive = [false, false]; // which result slots have running jobs
     let turboMode = false;
     let jobQueue = [];
     let currentBlobUrl = null;
     let currentBlobUrl1 = null;
+
+    function maxConcurrent() { return turboMode ? 2 : 1; }
+
+    function getAvailableSlotIdx() {
+      for (let i = 0; i < maxConcurrent(); i++) {
+        if (!slotActive[i]) return i;
+      }
+      return -1;
+    }
+
+    // Start queued jobs into any free slots (up to maxConcurrent).
+    function maybeFillSlots() {
+      let slotIdx;
+      while (jobQueue.length > 0 && (slotIdx = getAvailableSlotIdx()) !== -1) {
+        const next = jobQueue.shift();
+        slotActive[slotIdx] = true;
+        updateQueueDisplay();
+        runJob(next, slotIdx);
+      }
+    }
 
     function onWorkflowChange() {
       const wf = document.getElementById('workflowType').value;
@@ -2119,18 +2139,20 @@
         jobQueue.push(params);
         updateQueueDisplay();
         setStatus(`Added to queue (position ${jobQueue.length})`, 'success');
+        // In turbo mode, immediately fill a free slot if one is available.
+        maybeFillSlots();
         return;
       }
 
-      const numJobs = turboMode ? 2 : 1;
+      // Nothing running — start exactly one job in slot 0.
       isProcessing = true;
-      activeJobCount = numJobs;
+      slotActive[0] = true;
       setSpinner(true);
-      setStatus(turboMode ? 'Submitting 2 jobs…' : 'Submitting job…');
+      setStatus('Submitting job…');
       if (document.getElementById('resultImg').style.display === 'none') {
         document.getElementById('placeholder').style.display = '';
       }
-      // Clear second slot when starting a new batch
+      // Clear second slot when starting fresh.
       const img1 = document.getElementById('resultImg1');
       img1.style.display = 'none';
       img1.src = '';
@@ -2138,7 +2160,6 @@
       document.getElementById('downloadBtn').style.visibility = 'hidden';
 
       runJob(params, 0);
-      if (turboMode) runJob({ ...params }, 1);
     }
 
     async function runJob(params, slotIdx) {
@@ -2152,7 +2173,7 @@
         const data = await res.json();
         if (data.error) throw new Error(data.error);
         jobId = data.id;
-        if (!turboMode) setStatus(`Job submitted — polling (id: ${jobId})…`);
+        setStatus(`Job submitted — polling (id: ${jobId})…`);
       } catch (err) {
         setStatus('Submission failed: ' + err.message, 'error');
         finishJob(slotIdx);
@@ -2215,26 +2236,9 @@
     }
 
     function finishJob(slotIdx) {
-      activeJobCount = Math.max(0, activeJobCount - 1);
-      if (activeJobCount > 0) return; // other jobs still in flight
-      if (jobQueue.length > 0) {
-        const next = jobQueue.shift();
-        updateQueueDisplay();
-        setStatus(`Starting next queued job… (${jobQueue.length} remaining)`);
-        // Reset slot 1 for next batch; keep spinner active and isProcessing true
-        const img1 = document.getElementById('resultImg1');
-        img1.style.display = 'none';
-        img1.src = '';
-        if (currentBlobUrl1) { URL.revokeObjectURL(currentBlobUrl1); currentBlobUrl1 = null; }
-        const numJobs = turboMode ? 2 : 1;
-        activeJobCount = numJobs;
-        // Keep isProcessing = true so Generate clicks during the 500ms delay go to
-        // the queue instead of spawning a second concurrent runJob.
-        setTimeout(() => {
-          runJob(next, 0);
-          if (turboMode) runJob({ ...next }, 1);
-        }, 500);
-      } else {
+      slotActive[slotIdx] = false;
+      maybeFillSlots(); // fill freed slot from queue if any
+      if (slotActive.every(v => !v)) {
         setSpinner(false);
         isProcessing = false;
         updateQueueDisplay();
