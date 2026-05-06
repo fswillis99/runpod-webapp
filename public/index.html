@@ -311,16 +311,6 @@
     }
     .turbo-btn:hover:not(:disabled) { border-color: #f59e0b; color: #f59e0b; background: transparent; }
     .turbo-btn.active { background: rgba(245,158,11,0.12); border-color: #f59e0b; color: #f59e0b; }
-    #imgContainer { position: absolute; inset: 0; display: flex; gap: 2px; }
-    #imgContainer img {
-      position: static;
-      flex: 1;
-      min-width: 0;
-      width: auto;
-      height: 100%;
-      object-fit: contain;
-      border-radius: 12px;
-    }
 
     /* ── History section ── */
     .history-section {
@@ -1025,10 +1015,7 @@
     <div class="panel-image" id="imagePanel">
       <div class="placeholder" id="placeholder">Your image will appear here</div>
       <div class="spinner" id="spinner"><div class="spinner-ring"></div></div>
-      <div id="imgContainer">
-        <img id="resultImg" style="display:none" alt="Generated image" />
-        <img id="resultImg1" style="display:none" alt="Generated image 2" />
-      </div>
+      <img id="resultImg" style="display:none" alt="Generated image" />
     </div>
   </div>
 
@@ -1173,7 +1160,6 @@
     let turboMode = false;
     let jobQueue = [];
     let currentBlobUrl = null;
-    let currentBlobUrl1 = null;
 
     function maxConcurrent() { return turboMode ? 2 : 1; }
 
@@ -1329,28 +1315,24 @@
       return URL.createObjectURL(blob);
     }
 
-    function showImage(src, filename, slotIdx = 0) {
-      const imgId = slotIdx === 1 ? 'resultImg1' : 'resultImg';
-      const prevBlobUrl = slotIdx === 1 ? currentBlobUrl1 : currentBlobUrl;
+    function showImage(src, filename) {
+      const prevBlobUrl = currentBlobUrl;
       let displaySrc;
       if (src.startsWith('/') || src.startsWith('http')) {
-        if (slotIdx === 1) currentBlobUrl1 = null; else currentBlobUrl = null;
+        currentBlobUrl = null;
         displaySrc = src;
       } else {
-        const blobUrl = base64ToBlobUrl(src);
-        if (slotIdx === 1) currentBlobUrl1 = blobUrl; else currentBlobUrl = blobUrl;
-        displaySrc = blobUrl;
+        currentBlobUrl = base64ToBlobUrl(src);
+        displaySrc = currentBlobUrl;
       }
-      const img = document.getElementById(imgId);
+      const img = document.getElementById('resultImg');
       img.src = displaySrc;
       img.style.display = 'block';
       document.getElementById('placeholder').style.display = 'none';
-      if (slotIdx === 0) {
-        const dl = document.getElementById('downloadBtn');
-        dl.href = displaySrc;
-        dl.download = filename;
-        dl.style.visibility = 'visible';
-      }
+      const dl = document.getElementById('downloadBtn');
+      dl.href = displaySrc;
+      dl.download = filename;
+      dl.style.visibility = 'visible';
       // Revoke the old blob URL only after the new image has loaded to prevent
       // the img element briefly having an invalid src, which collapses the panel.
       if (prevBlobUrl) {
@@ -2152,11 +2134,6 @@
       if (document.getElementById('resultImg').style.display === 'none') {
         document.getElementById('placeholder').style.display = '';
       }
-      // Clear second slot when starting fresh.
-      const img1 = document.getElementById('resultImg1');
-      img1.style.display = 'none';
-      img1.src = '';
-      if (currentBlobUrl1) { URL.revokeObjectURL(currentBlobUrl1); currentBlobUrl1 = null; }
       document.getElementById('downloadBtn').style.visibility = 'hidden';
 
       runJob(params, 0);
@@ -2197,7 +2174,7 @@
           } else if (status === 'COMPLETED') {
             const imageEntry = data.output?.images?.[0];
             if (!imageEntry?.data) throw new Error('No image in response');
-            showImage(imageEntry.data, imageEntry.filename, slotIdx);
+            showImage(imageEntry.data, imageEntry.filename);
             const execMs = typeof data.executionTime === 'number' ? data.executionTime : null;
             setStatus(`Done!${execMs !== null ? ` (${(execMs / 1000).toFixed(1)}s)` : ''}`, 'success');
             const jobTimestamp = new Date().toISOString();
@@ -2219,7 +2196,7 @@
               }).then(() => { if (statsExpanded) renderExecStats(); })
                 .catch(err => console.warn('Exec time save failed:', err));
             }
-            if (slotIdx === 0) refreshCredits();
+            refreshCredits();
             finishJob(slotIdx);
           } else if (status === 'FAILED') {
             throw new Error(`Job failed: ${data.error || JSON.stringify(data.output) || 'no details'}`);
