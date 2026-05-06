@@ -798,7 +798,7 @@ function buildWorkflowQwen2512({
 }
 
 // Qwen-Image 2511 — image edit with 1–3 reference images
-function buildWorkflowQwen2511({ prompt, image_filenames = [], seed, loras = [] }) {
+function buildWorkflowQwen2511({ prompt, negative_prompt, image_filenames = [], seed, loras = [] }) {
   const fnames = image_filenames.length > 0 ? image_filenames.slice(0, 3) : ["input1.png"];
 
   const workflow = {
@@ -820,7 +820,7 @@ function buildWorkflowQwen2511({ prompt, image_filenames = [], seed, loras = [] 
   });
 
   const firstScaleId = String(nodePairs[0][1]);
-  workflow[149] = { class_type: "TextEncodeQwenImageEditPlus", inputs: { prompt: "",           clip: ["162", 0], vae: ["146", 0], ...condImageInputs } };
+  workflow[149] = { class_type: "TextEncodeQwenImageEditPlus", inputs: { prompt: negative_prompt || "", clip: ["162", 0], vae: ["146", 0], ...condImageInputs } };
   workflow[151] = { class_type: "TextEncodeQwenImageEditPlus", inputs: { prompt: prompt || "", clip: ["162", 0], vae: ["146", 0], ...condImageInputs } };
   workflow[147] = { class_type: "FluxKontextMultiReferenceLatentMethod", inputs: { conditioning: ["149", 0], reference_latents_method: "index_timestep_zero" } };
   workflow[148] = { class_type: "FluxKontextMultiReferenceLatentMethod", inputs: { conditioning: ["151", 0], reference_latents_method: "index_timestep_zero" } };
@@ -878,7 +878,7 @@ app.post("/api/generate", async (req, res) => {
   } else if (workflowType === "qwen2511") {
     const imgs = (Array.isArray(req.body.images) ? req.body.images : []).slice(0, 3);
     const image_filenames = imgs.map((img, i) => img.name || `input${i + 1}.png`);
-    workflow = buildWorkflowQwen2511({ prompt, image_filenames, seed, loras });
+    workflow = buildWorkflowQwen2511({ prompt, negative_prompt, image_filenames, seed, loras });
     workflow["9"].inputs.filename_prefix = buildFilenamePrefix("qwen2511");
     input = {
       workflow,
