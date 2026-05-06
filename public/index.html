@@ -293,6 +293,35 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    .generate-row { display: flex; gap: 0.5rem; }
+    .generate-row #generateBtn { flex: 1; }
+    .turbo-btn {
+      flex: 0 0 auto;
+      width: auto;
+      padding: 0.6rem 0.9rem;
+      background: transparent;
+      border: 1px solid #444;
+      color: #555;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s, background 0.2s;
+      border-radius: 8px;
+    }
+    .turbo-btn:hover:not(:disabled) { border-color: #f59e0b; color: #f59e0b; background: transparent; }
+    .turbo-btn.active { background: rgba(245,158,11,0.12); border-color: #f59e0b; color: #f59e0b; }
+    #imgContainer { position: absolute; inset: 0; display: flex; gap: 2px; }
+    #imgContainer img {
+      position: static;
+      flex: 1;
+      min-width: 0;
+      width: auto;
+      height: 100%;
+      object-fit: contain;
+      border-radius: 12px;
+    }
+
     /* ── History section ── */
     .history-section {
       width: 100%;
@@ -980,7 +1009,10 @@
           <input type="number" id="guidance" value="3.5" min="1" max="20" step="0.5" />
         </div>
       </div>
-      <button id="generateBtn" onclick="generate()">Generate</button>
+      <div class="generate-row">
+        <button id="generateBtn" onclick="generate()">Generate</button>
+        <button id="turboBtn" class="turbo-btn" onclick="toggleTurbo()" title="Submit 2 requests simultaneously">Turbo</button>
+      </div>
       <div id="queueStatus" class="queue-panel">
         <div class="queue-header">Queued</div>
         <div id="queueList"></div>
@@ -993,7 +1025,10 @@
     <div class="panel-image" id="imagePanel">
       <div class="placeholder" id="placeholder">Your image will appear here</div>
       <div class="spinner" id="spinner"><div class="spinner-ring"></div></div>
-      <img id="resultImg" style="display:none" alt="Generated image" />
+      <div id="imgContainer">
+        <img id="resultImg" style="display:none" alt="Generated image" />
+        <img id="resultImg1" style="display:none" alt="Generated image 2" />
+      </div>
     </div>
   </div>
 
@@ -1134,8 +1169,11 @@
 
     // Queue state
     let isProcessing = false;
+    let activeJobCount = 0;
+    let turboMode = false;
     let jobQueue = [];
     let currentBlobUrl = null;
+    let currentBlobUrl1 = null;
 
     function onWorkflowChange() {
       const wf = document.getElementById('workflowType').value;
@@ -1156,6 +1194,11 @@
 
     function toggleLora(btn) {
       btn.classList.toggle('active');
+    }
+
+    function toggleTurbo() {
+      turboMode = !turboMode;
+      document.getElementById('turboBtn').classList.toggle('active', turboMode);
     }
 
     function getActiveLoras() {
@@ -1266,24 +1309,28 @@
       return URL.createObjectURL(blob);
     }
 
-    function showImage(src, filename) {
-      const prevBlobUrl = currentBlobUrl;
+    function showImage(src, filename, slotIdx = 0) {
+      const imgId = slotIdx === 1 ? 'resultImg1' : 'resultImg';
+      const prevBlobUrl = slotIdx === 1 ? currentBlobUrl1 : currentBlobUrl;
       let displaySrc;
       if (src.startsWith('/') || src.startsWith('http')) {
-        currentBlobUrl = null;
+        if (slotIdx === 1) currentBlobUrl1 = null; else currentBlobUrl = null;
         displaySrc = src;
       } else {
-        currentBlobUrl = base64ToBlobUrl(src);
-        displaySrc = currentBlobUrl;
+        const blobUrl = base64ToBlobUrl(src);
+        if (slotIdx === 1) currentBlobUrl1 = blobUrl; else currentBlobUrl = blobUrl;
+        displaySrc = blobUrl;
       }
-      const img = document.getElementById('resultImg');
+      const img = document.getElementById(imgId);
       img.src = displaySrc;
       img.style.display = 'block';
       document.getElementById('placeholder').style.display = 'none';
-      const dl = document.getElementById('downloadBtn');
-      dl.href = displaySrc;
-      dl.download = filename;
-      dl.style.visibility = 'visible';
+      if (slotIdx === 0) {
+        const dl = document.getElementById('downloadBtn');
+        dl.href = displaySrc;
+        dl.download = filename;
+        dl.style.visibility = 'visible';
+      }
       // Revoke the old blob URL only after the new image has loaded to prevent
       // the img element briefly having an invalid src, which collapses the panel.
       if (prevBlobUrl) {
@@ -2075,20 +2122,26 @@
         return;
       }
 
-      runJob(params);
-    }
-
-    async function runJob(params) {
+      const numJobs = turboMode ? 2 : 1;
       isProcessing = true;
+      activeJobCount = numJobs;
       setSpinner(true);
-      setStatus('Submitting job…');
-      // Keep any existing image visible under the spinner overlay.
-      // Only show the placeholder when there is no image yet.
+      setStatus(turboMode ? 'Submitting 2 jobs…' : 'Submitting job…');
       if (document.getElementById('resultImg').style.display === 'none') {
         document.getElementById('placeholder').style.display = '';
       }
+      // Clear second slot when starting a new batch
+      const img1 = document.getElementById('resultImg1');
+      img1.style.display = 'none';
+      img1.src = '';
+      if (currentBlobUrl1) { URL.revokeObjectURL(currentBlobUrl1); currentBlobUrl1 = null; }
       document.getElementById('downloadBtn').style.visibility = 'hidden';
 
+      runJob(params, 0);
+      if (turboMode) runJob({ ...params }, 1);
+    }
+
+    async function runJob(params, slotIdx) {
       let jobId;
       try {
         const res = await fetch('/api/generate', {
@@ -2099,10 +2152,10 @@
         const data = await res.json();
         if (data.error) throw new Error(data.error);
         jobId = data.id;
-        setStatus(`Job submitted — polling (id: ${jobId})…`);
+        if (!turboMode) setStatus(`Job submitted — polling (id: ${jobId})…`);
       } catch (err) {
         setStatus('Submission failed: ' + err.message, 'error');
-        finishJob();
+        finishJob(slotIdx);
         return;
       }
 
@@ -2115,13 +2168,15 @@
           const status = data.status;
 
           if (status === 'IN_QUEUE' || status === 'IN_PROGRESS') {
-            const queueNote = jobQueue.length > 0 ? ` · ${jobQueue.length} queued` : '';
-            setStatus(`Status: ${status} (attempt ${attempts})${queueNote}…`);
+            if (!turboMode) {
+              const queueNote = jobQueue.length > 0 ? ` · ${jobQueue.length} queued` : '';
+              setStatus(`Status: ${status} (attempt ${attempts})${queueNote}…`);
+            }
             setTimeout(poll, POLL_INTERVAL_MS);
           } else if (status === 'COMPLETED') {
             const imageEntry = data.output?.images?.[0];
             if (!imageEntry?.data) throw new Error('No image in response');
-            showImage(imageEntry.data, imageEntry.filename);
+            showImage(imageEntry.data, imageEntry.filename, slotIdx);
             const execMs = typeof data.executionTime === 'number' ? data.executionTime : null;
             setStatus(`Done!${execMs !== null ? ` (${(execMs / 1000).toFixed(1)}s)` : ''}`, 'success');
             const jobTimestamp = new Date().toISOString();
@@ -2143,8 +2198,8 @@
               }).then(() => { if (statsExpanded) renderExecStats(); })
                 .catch(err => console.warn('Exec time save failed:', err));
             }
-            refreshCredits();
-            finishJob();
+            if (slotIdx === 0) refreshCredits();
+            finishJob(slotIdx);
           } else if (status === 'FAILED') {
             throw new Error(`Job failed: ${data.error || JSON.stringify(data.output) || 'no details'}`);
           } else {
@@ -2152,23 +2207,35 @@
           }
         } catch (err) {
           setStatus('Error: ' + err.message, 'error');
-          finishJob();
+          finishJob(slotIdx);
         }
       };
 
       setTimeout(poll, POLL_INTERVAL_MS);
     }
 
-    function finishJob() {
-      setSpinner(false);
+    function finishJob(slotIdx) {
+      activeJobCount = Math.max(0, activeJobCount - 1);
+      if (activeJobCount > 0) return; // other jobs still in flight
       if (jobQueue.length > 0) {
         const next = jobQueue.shift();
         updateQueueDisplay();
         setStatus(`Starting next queued job… (${jobQueue.length} remaining)`);
+        // Reset slot 1 for next batch; keep spinner active and isProcessing true
+        const img1 = document.getElementById('resultImg1');
+        img1.style.display = 'none';
+        img1.src = '';
+        if (currentBlobUrl1) { URL.revokeObjectURL(currentBlobUrl1); currentBlobUrl1 = null; }
+        const numJobs = turboMode ? 2 : 1;
+        activeJobCount = numJobs;
         // Keep isProcessing = true so Generate clicks during the 500ms delay go to
         // the queue instead of spawning a second concurrent runJob.
-        setTimeout(() => runJob(next), 500);
+        setTimeout(() => {
+          runJob(next, 0);
+          if (turboMode) runJob({ ...next }, 1);
+        }, 500);
       } else {
+        setSpinner(false);
         isProcessing = false;
         updateQueueDisplay();
       }
