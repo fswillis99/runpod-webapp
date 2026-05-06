@@ -849,6 +849,43 @@ function buildWorkflowQwen2511({ prompt, negative_prompt, image_filenames = [], 
 // ---------------------------------------------------------------------------
 // RunPod proxy
 // ---------------------------------------------------------------------------
+app.post("/api/preview-workflow", (req, res) => {
+  const {
+    workflowType = "flux",
+    prompt,
+    negative_prompt,
+    width,
+    height,
+    steps,
+    guidance,
+    seed,
+    loras = [],
+  } = req.body;
+
+  let workflow, input;
+
+  if (workflowType === "qwen2512") {
+    workflow = buildWorkflowQwen2512({ prompt, negative_prompt, width, height, seed, loras });
+    workflow["60"].inputs.filename_prefix = buildFilenamePrefix("qwen2512");
+    input = { workflow };
+  } else if (workflowType === "qwen2511") {
+    const imgs = (Array.isArray(req.body.images) ? req.body.images : []).slice(0, 3);
+    const image_filenames = imgs.map((img, i) => img.name || `input${i + 1}.png`);
+    workflow = buildWorkflowQwen2511({ prompt, negative_prompt, image_filenames, seed, loras });
+    workflow["9"].inputs.filename_prefix = buildFilenamePrefix("qwen2511");
+    input = {
+      workflow,
+      images: imgs.map(img => ({ name: img.name, image: img.data })),
+    };
+  } else {
+    workflow = buildWorkflowFlux({ prompt, negative_prompt, width, height, steps, guidance, seed });
+    workflow["8"].inputs.filename_prefix = buildFilenamePrefix(MODEL_NAME.replace(/\.[^.]+$/, ""));
+    input = { workflow };
+  }
+
+  res.json({ input });
+});
+
 app.post("/api/generate", async (req, res) => {
   const {
     workflowType = "flux",
