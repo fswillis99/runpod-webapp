@@ -56,6 +56,17 @@ Open [http://localhost:3000](http://localhost:3000).
 | **Qwen-Image 2512** | Prompt, dimensions | Turbo mode (6 steps, Lightning LoRA) |
 | **Qwen-Image 2511** | Prompt + image upload | Image editing, turbo mode (6 steps) |
 
+## Inspecting the workflow payload
+
+`POST /api/preview-workflow` accepts the same body as the generate endpoint and returns the fully-constructed ComfyUI workflow graph that would be sent to RunPod — without submitting a job.
+
+```bash
+curl -s -X POST http://localhost:3000/api/preview-workflow \
+  -H 'Content-Type: application/json' \
+  -d '{"workflowType":"qwen2512","prompt":"a cat","width":1024,"height":1024}' \
+  | jq .
+```
+
 ## Project Structure
 
 ```

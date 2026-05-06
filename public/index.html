@@ -1204,15 +1204,19 @@
       const isQwen = wf === 'qwen2512' || wf === 'qwen2511';
       document.getElementById('imageUploadSection').style.display = wf === 'qwen2511' ? '' : 'none';
       document.getElementById('lorasSection').style.display = isQwen ? '' : 'none';
-      document.getElementById('negativeSection').style.display = wf === 'flux' ? '' : 'none';
+      document.getElementById('negativeSection').style.display = '';
       document.getElementById('dimensionsSection').style.display = (wf === 'flux' || wf === 'qwen2512') ? '' : 'none';
       document.getElementById('samplerSection').style.display = wf === 'flux' ? '' : 'none';
       if (wf === 'qwen2512') {
         document.getElementById('width').value = 1328;
         document.getElementById('height').value = 1328;
+        document.getElementById('negative').value = '低分辨率，低画质，肢体畸形，手指畸形，画面过饱和，蜡像感，人脸无细节，过度光滑，画面具有AI感。构图混乱。文字模糊，扭曲';
+      } else if (wf === 'qwen2511') {
+        document.getElementById('negative').value = '';
       } else if (wf === 'flux') {
         document.getElementById('width').value = 1024;
         document.getElementById('height').value = 1024;
+        document.getElementById('negative').value = 'text, watermark, blurry, ugly, deformed';
       }
     }
 
@@ -2141,10 +2145,12 @@
         params.steps = parseInt(document.getElementById('steps').value);
         params.guidance = parseFloat(document.getElementById('guidance').value);
       } else if (workflowType === 'qwen2512') {
+        params.negative_prompt = document.getElementById('negative').value;
         params.width = parseInt(document.getElementById('width').value);
         params.height = parseInt(document.getElementById('height').value);
         params.loras = getActiveLoras();
       } else if (workflowType === 'qwen2511') {
+        params.negative_prompt = document.getElementById('negative').value;
         params.images = uploadedImages
           .filter(Boolean)
           .map((img, i) => ({ name: `input${i + 1}.png`, data: img.data }));
