@@ -292,6 +292,16 @@
       border-radius: 50%; animation: spin 0.8s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    .queue-active-dot {
+      flex-shrink: 0;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #6366f1;
+      animation: pulse-dot 1.4s ease-in-out infinite;
+    }
+    #activeSection.has-divider { border-top: 1px solid #222; }
 
     .generate-row { display: flex; gap: 0.5rem; }
     .generate-row #generateBtn { flex: 1; }
@@ -1004,8 +1014,14 @@
         <button id="turboBtn" class="turbo-btn" onclick="toggleTurbo()" title="Submit 2 requests simultaneously">Turbo</button>
       </div>
       <div id="queueStatus" class="queue-panel">
-        <div class="queue-header">Queued</div>
-        <div id="queueList"></div>
+        <div id="queueSection" style="display:none">
+          <div class="queue-header">Queued</div>
+          <div id="queueList"></div>
+        </div>
+        <div id="activeSection" style="display:none">
+          <div class="queue-header">Running</div>
+          <div id="activeList"></div>
+        </div>
       </div>
       <a id="downloadBtn" class="btn-download">Download</a>
       <div class="status-bar" id="status">Ready</div>
@@ -1157,6 +1173,7 @@
     // Queue state
     let isProcessing = false;
     const slotActive = [false, false]; // which result slots have running jobs
+    const activeJobParams = [null, null]; // params for each running slot
     let turboMode = false;
     let jobQueue = [];
     let currentBlobUrl = null;
@@ -1176,6 +1193,7 @@
       while (jobQueue.length > 0 && (slotIdx = getAvailableSlotIdx()) !== -1) {
         const next = jobQueue.shift();
         slotActive[slotIdx] = true;
+        activeJobParams[slotIdx] = next;
         updateQueueDisplay();
         runJob(next, slotIdx);
       }
@@ -1280,18 +1298,46 @@
 
     function updateQueueDisplay() {
       const panel = document.getElementById('queueStatus');
-      if (jobQueue.length === 0) {
+      const activeJobs = activeJobParams.filter(Boolean);
+      const hasActive = activeJobs.length > 0;
+      const hasQueued = jobQueue.length > 0;
+
+      if (!hasActive && !hasQueued) {
         panel.style.display = 'none';
         return;
       }
-      document.getElementById('queueList').innerHTML = jobQueue.map((job, i) => `
-        <div class="queue-item">
-          <span class="queue-pos">${i + 1}</span>
-          <span class="queue-wf">${escapeHtml(WF_LABELS[job.workflowType] || job.workflowType)}</span>
-          <span class="queue-prompt">${escapeHtml(job.prompt)}</span>
-          <button class="queue-remove" onclick="removeFromQueue(${i})" title="Remove">×</button>
-        </div>
-      `).join('');
+
+      const queueSection = document.getElementById('queueSection');
+      const activeSection = document.getElementById('activeSection');
+
+      if (hasQueued) {
+        document.getElementById('queueList').innerHTML = jobQueue.map((job, i) => `
+          <div class="queue-item">
+            <span class="queue-pos">${i + 1}</span>
+            <span class="queue-wf">${escapeHtml(WF_LABELS[job.workflowType] || job.workflowType)}</span>
+            <span class="queue-prompt">${escapeHtml(job.prompt)}</span>
+            <button class="queue-remove" onclick="removeFromQueue(${i})" title="Remove">×</button>
+          </div>
+        `).join('');
+        queueSection.style.display = '';
+      } else {
+        queueSection.style.display = 'none';
+      }
+
+      if (hasActive) {
+        document.getElementById('activeList').innerHTML = activeJobs.map(job => `
+          <div class="queue-item">
+            <span class="queue-active-dot"></span>
+            <span class="queue-wf">${escapeHtml(WF_LABELS[job.workflowType] || job.workflowType)}</span>
+            <span class="queue-prompt">${escapeHtml(job.prompt)}</span>
+          </div>
+        `).join('');
+        activeSection.classList.toggle('has-divider', hasQueued);
+        activeSection.style.display = '';
+      } else {
+        activeSection.style.display = 'none';
+      }
+
       panel.style.display = 'block';
     }
 
@@ -2129,6 +2175,7 @@
       // Nothing running — start exactly one job in slot 0.
       isProcessing = true;
       slotActive[0] = true;
+      activeJobParams[0] = params;
       setSpinner(true);
       setStatus('Submitting job…');
       if (document.getElementById('resultImg').style.display === 'none') {
@@ -2137,6 +2184,7 @@
       document.getElementById('downloadBtn').style.visibility = 'hidden';
 
       runJob(params, 0);
+      updateQueueDisplay();
     }
 
     async function runJob(params, slotIdx) {
@@ -2214,12 +2262,13 @@
 
     function finishJob(slotIdx) {
       slotActive[slotIdx] = false;
+      activeJobParams[slotIdx] = null;
       maybeFillSlots(); // fill freed slot from queue if any
       if (slotActive.every(v => !v)) {
         setSpinner(false);
         isProcessing = false;
-        updateQueueDisplay();
       }
+      updateQueueDisplay();
     }
 
     async function refreshCredits() {
