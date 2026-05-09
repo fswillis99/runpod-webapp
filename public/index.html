@@ -1154,6 +1154,7 @@
     </div>
   </div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script>
     const POLL_INTERVAL_MS = 2000;
     let historyEntries = [];
@@ -1727,10 +1728,29 @@
       await Promise.all([refreshHistory(), refreshTrash()]);
     }
 
-    async function bulkDownload() {
-      const entries = historyEntries.filter(e => selectedHistoryIds.has(e.id));
+    const ZIP_THRESHOLD = 10;
+
+    async function downloadAsZip(entries, pathFn, zipName) {
+      const zip = new JSZip();
       for (const entry of entries) {
-        const res = await fetch(`/images/${entry.filename}`);
+        const res = await fetch(pathFn(entry));
+        const blob = await res.blob();
+        zip.file(entry.filename, blob);
+      }
+      const content = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(content);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = zipName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    }
+
+    async function downloadIndividually(entries, pathFn) {
+      for (const entry of entries) {
+        const res = await fetch(pathFn(entry));
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -1741,6 +1761,20 @@
         document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(url), 30000);
         await new Promise(r => setTimeout(r, 150));
+      }
+    }
+
+    async function bulkDownload() {
+      const entries = historyEntries.filter(e => selectedHistoryIds.has(e.id));
+      if (!entries.length) return;
+      const pathFn = e => `/images/${e.filename}`;
+      if (entries.length > ZIP_THRESHOLD && confirm(`You have ${entries.length} images selected. Download as a single ZIP file instead of ${entries.length} separate files?`)) {
+        const now = new Date();
+        const pad = (n, w=2) => String(n).padStart(w,'0');
+        const stamp = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+        await downloadAsZip(entries, pathFn, `images-${stamp}.zip`);
+      } else {
+        await downloadIndividually(entries, pathFn);
       }
     }
 
@@ -1943,19 +1977,16 @@
       if (!lib) return;
       const sel = getLibSel(libId);
       const entries = (lib.entries || []).filter(e => sel.has(e.id));
+      if (!entries.length) return;
       const slug = lib.slug || String(libId);
-      for (const entry of entries) {
-        const res = await fetch(`/images/lib/${slug}/${entry.filename}`);
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = entry.filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 30000);
-        await new Promise(r => setTimeout(r, 150));
+      const pathFn = e => `/images/lib/${slug}/${e.filename}`;
+      if (entries.length > ZIP_THRESHOLD && confirm(`You have ${entries.length} images selected. Download as a single ZIP file instead of ${entries.length} separate files?`)) {
+        const now = new Date();
+        const pad = (n, w=2) => String(n).padStart(w,'0');
+        const stamp = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+        await downloadAsZip(entries, pathFn, `${lib.name || slug}-${stamp}.zip`);
+      } else {
+        await downloadIndividually(entries, pathFn);
       }
     }
 
