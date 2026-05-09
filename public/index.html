@@ -595,6 +595,14 @@
     }
     .lib-import-btn:hover { border-color: #6366f1; color: #6366f1; }
     .lib-import-btn:disabled { opacity: 0.5; cursor: default; }
+    .lib-upload-btn {
+      font-size: 0.72rem; padding: 0.25rem 0.55rem;
+      border: 1px solid #333; border-radius: 6px;
+      background: transparent; color: #555; cursor: pointer; width: auto;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .lib-upload-btn:hover { border-color: #6366f1; color: #6366f1; }
+    .lib-upload-btn:disabled { opacity: 0.5; cursor: default; }
     .library-empty { color: #333; font-size: 0.85rem; padding: 0.5rem 0; }
 
     /* ── History lightbox modal ── */
@@ -1109,6 +1117,8 @@
 
   <!-- Shared library picker dropdown -->
   <div id="libPickerDropdown" class="lib-picker" style="display:none"></div>
+  <!-- Hidden file input for library image uploads -->
+  <input type="file" id="libUploadInput" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="handleLibUpload(this)">
 
   <div id="confirmOverlay" class="confirm-overlay" style="display:none">
     <div class="confirm-box">
@@ -1894,6 +1904,7 @@
                          onchange="onLibSelectAllChange(${lib.id})" />
                   All
                 </label>
+                <button class="lib-upload-btn" onclick="openLibUpload(${lib.id})">Upload</button>
                 <button class="lib-import-btn" onclick="importLibraryImages(${lib.id}, this)">Import</button>
                 <button class="lib-delete-btn" onclick="deleteLibrary(${lib.id})">Delete</button>
               </div>
@@ -2119,6 +2130,37 @@
       } finally {
         if (btn) { btn.disabled = false; btn.textContent = 'Import'; }
       }
+    }
+
+    function openLibUpload(libId) {
+      const input = document.getElementById('libUploadInput');
+      input.dataset.libId = libId;
+      input.value = '';
+      input.click();
+    }
+
+    async function handleLibUpload(input) {
+      const libId = parseInt(input.dataset.libId, 10);
+      const file = input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        const base64 = ev.target.result.split(',')[1];
+        try {
+          const res = await fetch(`/api/libraries/${libId}/upload`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image: base64, original_filename: file.name }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Upload failed');
+          await refreshLibraries();
+          setStatus(data.workflow_type === 'manual' ? 'Uploaded (marked manual — no prompt metadata)' : 'Uploaded to library', 'success');
+        } catch (err) {
+          setStatus(`Upload error: ${err.message}`, 'error');
+        }
+      };
+      reader.readAsDataURL(file);
     }
 
     function showCreateLibraryForm() {

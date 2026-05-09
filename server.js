@@ -578,6 +578,57 @@ app.delete("/api/libraries/:libId/entries/:entryId", (req, res) => {
   res.json({ ok: true });
 });
 
+// Upload an image file directly into a library.
+// Reads iTXt metadata from PNG; if no prompt found, sets workflow_type to "manual".
+app.post("/api/libraries/:id/upload", (req, res) => {
+  const libId = parseInt(req.params.id, 10);
+  const libs = loadLibraries();
+  const lib = libs.find(l => l.id === libId);
+  if (!lib) return res.status(404).json({ error: "library not found" });
+
+  const { image, original_filename } = req.body;
+  if (!image) return res.status(400).json({ error: "image required" });
+
+  const buf = Buffer.from(image, "base64");
+  const dstDir = libDir(lib);
+  fs.mkdirSync(dstDir, { recursive: true });
+
+  let prompt = "", workflow_type = "", loras = [];
+  const isPng = buf.length >= 4 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47;
+  if (isPng) {
+    try {
+      const meta = readPngItxtChunks(buf);
+      prompt = meta.prompt || "";
+      workflow_type = meta.workflow_type || "";
+      loras = meta.loras ? meta.loras.split(",").filter(Boolean) : [];
+    } catch {
+      // proceed with empty metadata
+    }
+  }
+
+  if (!prompt) workflow_type = "manual";
+
+  const now = new Date();
+  const pad = (n, w = 2) => String(n).padStart(w, "0");
+  const ts = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  const ext = original_filename ? (path.extname(original_filename).toLowerCase() || ".png") : ".png";
+  let filename = `upload-${ts}${ext}`;
+  let n = 1;
+  while (fs.existsSync(path.join(dstDir, filename))) {
+    filename = `upload-${ts}-${n}${ext}`;
+    n++;
+  }
+
+  fs.writeFileSync(path.join(dstDir, filename), buf);
+
+  lib.entries = lib.entries || [];
+  const entryId = Date.now();
+  const entry = { id: entryId, timestamp: now.toISOString(), filename, prompt, workflow_type, loras };
+  lib.entries.unshift(entry);
+  saveLibraries(libs);
+  res.json({ ok: true, entryId, filename, workflow_type });
+});
+
 // Scan a library's directory for image files not already registered as entries,
 // read iTXt metadata to populate fields, and find associated input sidecars.
 const INPUT_SIDECAR_RE = /-in\d+\.(png|jpg|jpeg|webp)$/i;
