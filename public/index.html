@@ -515,6 +515,26 @@
     .lib-picker-item:hover { background: #252525; color: #fff; }
     .lib-picker-empty { padding: 0.5rem 0.9rem; font-size: 0.78rem; color: #555; }
 
+    .confirm-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+      z-index: 4000; display: flex; align-items: center; justify-content: center;
+    }
+    .confirm-box {
+      background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px;
+      padding: 1.6rem 1.8rem; max-width: 380px; width: 90%;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    }
+    .confirm-msg { font-size: 0.9rem; color: #ccc; margin-bottom: 1.2rem; line-height: 1.5; }
+    .confirm-btns { display: flex; gap: 0.7rem; justify-content: flex-end; }
+    .confirm-btns button {
+      padding: 0.45rem 1rem; border-radius: 7px; border: 1px solid #333;
+      background: #222; color: #ccc; cursor: pointer; font-size: 0.82rem;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .confirm-btns button:hover { border-color: #6366f1; color: #fff; }
+    .confirm-btn-primary { background: #6366f1 !important; border-color: #6366f1 !important; color: #fff !important; }
+    .confirm-btn-primary:hover { background: #4f52d1 !important; border-color: #4f52d1 !important; }
+
     /* ── Libraries section ── */
     .libraries-section { width: 100%; max-width: 1100px; margin-top: 3rem; }
     .libraries-header {
@@ -1088,6 +1108,16 @@
   <!-- Shared library picker dropdown -->
   <div id="libPickerDropdown" class="lib-picker" style="display:none"></div>
 
+  <div id="confirmOverlay" class="confirm-overlay" style="display:none">
+    <div class="confirm-box">
+      <div class="confirm-msg" id="confirmMsg"></div>
+      <div class="confirm-btns">
+        <button id="confirmCancel"></button>
+        <button id="confirmOk" class="confirm-btn-primary"></button>
+      </div>
+    </div>
+  </div>
+
   <!-- History -->
   <div class="history-section">
     <div class="history-header">
@@ -1154,6 +1184,7 @@
     </div>
   </div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script>
     const POLL_INTERVAL_MS = 2000;
     let historyEntries = [];
@@ -1727,10 +1758,43 @@
       await Promise.all([refreshHistory(), refreshTrash()]);
     }
 
-    async function bulkDownload() {
-      const entries = historyEntries.filter(e => selectedHistoryIds.has(e.id));
+    const ZIP_THRESHOLD = 10;
+
+    function showConfirm(msg, okLabel, cancelLabel) {
+      return new Promise(resolve => {
+        document.getElementById('confirmMsg').textContent = msg;
+        document.getElementById('confirmOk').textContent = okLabel;
+        document.getElementById('confirmCancel').textContent = cancelLabel;
+        const overlay = document.getElementById('confirmOverlay');
+        overlay.style.display = 'flex';
+        const cleanup = result => { overlay.style.display = 'none'; resolve(result); };
+        document.getElementById('confirmOk').onclick = () => cleanup(true);
+        document.getElementById('confirmCancel').onclick = () => cleanup(false);
+        overlay.onclick = e => { if (e.target === overlay) cleanup(null); };
+      });
+    }
+
+    async function downloadAsZip(entries, pathFn, zipName) {
+      const zip = new JSZip();
       for (const entry of entries) {
-        const res = await fetch(`/images/${entry.filename}`);
+        const res = await fetch(pathFn(entry));
+        const blob = await res.blob();
+        zip.file(entry.filename, blob);
+      }
+      const content = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(content);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = zipName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    }
+
+    async function downloadIndividually(entries, pathFn) {
+      for (const entry of entries) {
+        const res = await fetch(pathFn(entry));
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -1741,6 +1805,26 @@
         document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(url), 30000);
         await new Promise(r => setTimeout(r, 150));
+      }
+    }
+
+    async function bulkDownload() {
+      const entries = historyEntries.filter(e => selectedHistoryIds.has(e.id));
+      if (!entries.length) return;
+      const pathFn = e => `/images/${e.filename}`;
+      if (entries.length > ZIP_THRESHOLD) {
+        const choice = await showConfirm(`You have ${entries.length} images selected. How would you like to download them?`, 'Bulk Download (zip)', 'Multiple Image Download (png)');
+        if (choice === null) return;
+        if (choice) {
+          const now = new Date();
+          const pad = (n, w=2) => String(n).padStart(w,'0');
+          const stamp = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+          await downloadAsZip(entries, pathFn, `images-${stamp}.zip`);
+        } else {
+          await downloadIndividually(entries, pathFn);
+        }
+      } else {
+        await downloadIndividually(entries, pathFn);
       }
     }
 
@@ -1943,19 +2027,22 @@
       if (!lib) return;
       const sel = getLibSel(libId);
       const entries = (lib.entries || []).filter(e => sel.has(e.id));
+      if (!entries.length) return;
       const slug = lib.slug || String(libId);
-      for (const entry of entries) {
-        const res = await fetch(`/images/lib/${slug}/${entry.filename}`);
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = entry.filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 30000);
-        await new Promise(r => setTimeout(r, 150));
+      const pathFn = e => `/images/lib/${slug}/${e.filename}`;
+      if (entries.length > ZIP_THRESHOLD) {
+        const choice = await showConfirm(`You have ${entries.length} images selected. How would you like to download them?`, 'Bulk Download (zip)', 'Multiple Image Download (png)');
+        if (choice === null) return;
+        if (choice) {
+          const now = new Date();
+          const pad = (n, w=2) => String(n).padStart(w,'0');
+          const stamp = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+          await downloadAsZip(entries, pathFn, `${lib.name || slug}-${stamp}.zip`);
+        } else {
+          await downloadIndividually(entries, pathFn);
+        }
+      } else {
+        await downloadIndividually(entries, pathFn);
       }
     }
 
