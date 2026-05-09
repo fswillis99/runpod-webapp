@@ -241,11 +241,26 @@ app.get("/api/execution-times", (req, res) => {
   res.json(loadExecTimes());
 });
 
-app.post("/api/execution-times", (req, res) => {
+app.post("/api/execution-times", async (req, res) => {
   const { timestamp, execution_time, workflow_type } = req.body;
   if (execution_time == null || !timestamp) return res.status(400).json({ error: "missing fields" });
+
+  let balance = null;
+  try {
+    const bRes = await fetch(`https://api.runpod.io/graphql?api_key=${API_KEY}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: "{ myself { clientBalance } }" }),
+    });
+    const bData = await bRes.json();
+    const raw = bData.data?.myself?.clientBalance ?? null;
+    balance = raw !== null ? parseFloat(raw.toFixed(2)) : null;
+  } catch (err) {
+    console.warn("Balance fetch for exec time failed:", err.message);
+  }
+
   const times = loadExecTimes();
-  times.unshift({ id: Date.now(), timestamp, execution_time, workflow_type: workflow_type || null });
+  times.unshift({ id: Date.now(), timestamp, execution_time, workflow_type: workflow_type || null, balance });
   const cutoff = new Date(Date.now() - EXEC_TIMES_RETENTION_MS).toISOString();
   const pruned = times.filter(t => t.timestamp >= cutoff);
   saveExecTimes(pruned);
