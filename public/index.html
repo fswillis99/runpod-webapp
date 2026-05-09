@@ -1770,7 +1770,7 @@
         const cleanup = result => { overlay.style.display = 'none'; resolve(result); };
         document.getElementById('confirmOk').onclick = () => cleanup(true);
         document.getElementById('confirmCancel').onclick = () => cleanup(false);
-        overlay.onclick = e => { if (e.target === overlay) cleanup(false); };
+        overlay.onclick = e => { if (e.target === overlay) cleanup(null); };
       });
     }
 
@@ -1812,11 +1812,17 @@
       const entries = historyEntries.filter(e => selectedHistoryIds.has(e.id));
       if (!entries.length) return;
       const pathFn = e => `/images/${e.filename}`;
-      if (entries.length > ZIP_THRESHOLD && await showConfirm(`You have ${entries.length} images selected. How would you like to download them?`, 'Bulk Download (zip)', 'Multiple Image Download (png)')) {
-        const now = new Date();
-        const pad = (n, w=2) => String(n).padStart(w,'0');
-        const stamp = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
-        await downloadAsZip(entries, pathFn, `images-${stamp}.zip`);
+      if (entries.length > ZIP_THRESHOLD) {
+        const choice = await showConfirm(`You have ${entries.length} images selected. How would you like to download them?`, 'Bulk Download (zip)', 'Multiple Image Download (png)');
+        if (choice === null) return;
+        if (choice) {
+          const now = new Date();
+          const pad = (n, w=2) => String(n).padStart(w,'0');
+          const stamp = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+          await downloadAsZip(entries, pathFn, `images-${stamp}.zip`);
+        } else {
+          await downloadIndividually(entries, pathFn);
+        }
       } else {
         await downloadIndividually(entries, pathFn);
       }
@@ -2024,11 +2030,17 @@
       if (!entries.length) return;
       const slug = lib.slug || String(libId);
       const pathFn = e => `/images/lib/${slug}/${e.filename}`;
-      if (entries.length > ZIP_THRESHOLD && await showConfirm(`You have ${entries.length} images selected. How would you like to download them?`, 'Bulk Download (zip)', 'Multiple Image Download (png)')) {
-        const now = new Date();
-        const pad = (n, w=2) => String(n).padStart(w,'0');
-        const stamp = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
-        await downloadAsZip(entries, pathFn, `${lib.name || slug}-${stamp}.zip`);
+      if (entries.length > ZIP_THRESHOLD) {
+        const choice = await showConfirm(`You have ${entries.length} images selected. How would you like to download them?`, 'Bulk Download (zip)', 'Multiple Image Download (png)');
+        if (choice === null) return;
+        if (choice) {
+          const now = new Date();
+          const pad = (n, w=2) => String(n).padStart(w,'0');
+          const stamp = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+          await downloadAsZip(entries, pathFn, `${lib.name || slug}-${stamp}.zip`);
+        } else {
+          await downloadIndividually(entries, pathFn);
+        }
       } else {
         await downloadIndividually(entries, pathFn);
       }
