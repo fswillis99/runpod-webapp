@@ -507,6 +507,7 @@
       background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 8px;
       padding: 0.35rem 0; min-width: 160px;
       box-shadow: 0 6px 24px rgba(0,0,0,0.55);
+      max-height: 60vh; overflow-y: auto;
     }
     .lib-picker-item {
       padding: 0.45rem 0.9rem; font-size: 0.82rem; color: #aaa;
@@ -2201,6 +2202,11 @@
       picker.style.top = `${rect.bottom + 4}px`;
       picker.style.left = `${rect.left}px`;
       picker.style.display = 'block';
+      // Flip upward if the dropdown extends below the viewport
+      const pickerRect = picker.getBoundingClientRect();
+      if (pickerRect.bottom > window.innerHeight) {
+        picker.style.top = `${rect.top - pickerRect.height - 4}px`;
+      }
     }
 
     function selectLibFromPicker(libId) {
