@@ -19,10 +19,25 @@
     }
 
     .titlebar {
+      position: sticky;
+      top: 0;
+      z-index: 200;
+      width: 100%;
+      background: rgba(15,15,15,0.96);
+      backdrop-filter: blur(6px);
+      border-bottom: 1px solid #1e1e1e;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .titlebar-top {
       display: flex;
       align-items: baseline;
       gap: 1.5rem;
-      margin-bottom: 2rem;
     }
 
     h1 {
@@ -40,6 +55,25 @@
     .credits span {
       color: #4ade80;
       font-weight: 600;
+    }
+
+    .site-nav {
+      display: flex;
+      gap: 0.25rem;
+    }
+
+    .site-nav a {
+      color: #888;
+      text-decoration: none;
+      font-size: 0.8rem;
+      padding: 0.25rem 0.65rem;
+      border-radius: 5px;
+      transition: color 0.15s, background 0.15s;
+    }
+
+    .site-nav a:hover {
+      color: #e0e0e0;
+      background: #1e1e1e;
     }
 
     /* ── Main workspace ── */
@@ -327,6 +361,7 @@
       width: 100%;
       max-width: 1100px;
       margin-top: 3rem;
+      scroll-margin-top: 5rem;
     }
 
     .history-header {
@@ -537,7 +572,7 @@
     .confirm-btn-primary:hover { background: #4f52d1 !important; border-color: #4f52d1 !important; }
 
     /* ── Libraries section ── */
-    .libraries-section { width: 100%; max-width: 1100px; margin-top: 3rem; }
+    .libraries-section { width: 100%; max-width: 1100px; margin-top: 3rem; scroll-margin-top: 5rem; }
     .libraries-header {
       font-size: 0.75rem; font-weight: 600; color: #555;
       letter-spacing: 0.08em; text-transform: uppercase;
@@ -813,7 +848,7 @@
     .lora-toggle.active { background: #6366f1; border-color: #6366f1; color: #fff; }
 
     /* ── Trash section ── */
-    .trash-section { width: 100%; max-width: 1100px; margin-top: 3rem; }
+    .trash-section { width: 100%; max-width: 1100px; margin-top: 3rem; scroll-margin-top: 5rem; }
     .trash-header {
       font-size: 0.75rem; font-weight: 600; color: #555;
       letter-spacing: 0.08em; text-transform: uppercase;
@@ -866,7 +901,7 @@
     .trash-header-controls { display: flex; align-items: center; gap: 0.75rem; }
 
     /* ── Exec time stats section ── */
-    .stats-section { width: 100%; max-width: 1100px; margin-top: 3rem; }
+    .stats-section { width: 100%; max-width: 1100px; margin-top: 3rem; scroll-margin-top: 5rem; }
     .stats-header {
       font-size: 0.75rem; font-weight: 600; color: #555;
       letter-spacing: 0.08em; text-transform: uppercase;
@@ -931,8 +966,16 @@
     <button onclick="this.closest('#reloadBanner').style.display='none'" title="Dismiss">&#x2715;</button>
   </div>
   <div class="titlebar">
-    <h1>RunPod Image Generator</h1>
-    <div class="credits" id="creditsDisplay">Credits: …</div>
+    <div class="titlebar-top">
+      <h1>RunPod Image Generator</h1>
+      <div class="credits" id="creditsDisplay">Credits: …</div>
+    </div>
+    <nav class="site-nav">
+      <a href="#section-history">History</a>
+      <a href="#section-library">Library</a>
+      <a href="#section-stats" onclick="expandStats()">Statistics</a>
+      <a href="#section-trash" onclick="expandTrash()">Trash</a>
+    </nav>
   </div>
 
   <div class="workspace">
@@ -1102,7 +1145,7 @@
   </div>
 
   <!-- Libraries -->
-  <div class="libraries-section">
+  <div class="libraries-section" id="section-library">
     <div class="libraries-header">
       <span>Libraries</span>
       <button class="new-lib-btn" onclick="showCreateLibraryForm()">+ New Library</button>
@@ -1132,7 +1175,7 @@
   </div>
 
   <!-- History -->
-  <div class="history-section">
+  <div class="history-section" id="section-history">
     <div class="history-header">
       <span>History</span>
       <div class="history-header-controls">
@@ -1157,7 +1200,7 @@
   </div>
 
   <!-- Execution time stats -->
-  <div class="stats-section">
+  <div class="stats-section" id="section-stats">
     <div class="stats-header" onclick="toggleStatsSection()">
       <span class="stats-toggle-arrow" id="statsArrow">▸</span>
       <span class="stats-title">Execution Time</span>
@@ -1181,7 +1224,7 @@
   </div>
 
   <!-- Trash -->
-  <div class="trash-section">
+  <div class="trash-section" id="section-trash">
     <div class="trash-header" onclick="toggleTrashSection()">
       <div class="trash-header-left">
         <span class="trash-toggle-arrow" id="trashArrow">▸</span>
@@ -2472,6 +2515,10 @@
       if (statsExpanded) renderExecStats();
     }
 
+    function expandStats() {
+      if (!statsExpanded) toggleStatsSection();
+    }
+
     async function renderExecStats() {
       let entries;
       try {
@@ -2569,6 +2616,10 @@
       trashExpanded = !trashExpanded;
       document.getElementById('trashContent').style.display = trashExpanded ? '' : 'none';
       document.getElementById('trashArrow').textContent = trashExpanded ? '▾' : '▸';
+    }
+
+    function expandTrash() {
+      if (!trashExpanded) toggleTrashSection();
     }
 
     async function refreshTrash() {
