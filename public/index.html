@@ -2545,8 +2545,12 @@
 
       // ── By Day ──────────────────────────────────────────────────────────────
       // Key by local calendar date so rows align with the user's clock.
+      const dayWindowMs = 30 * 24 * 60 * 60 * 1000;
+      const dayCutoff = new Date(Date.now() - dayWindowMs).toISOString();
+      const dayEntries = entries.filter(e => e.timestamp >= dayCutoff);
+
       const dayMap = new Map();
-      for (const e of entries) {
+      for (const e of dayEntries) {
         const d = new Date(e.timestamp);
         const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
         if (!dayMap.has(key)) {
@@ -2577,8 +2581,12 @@
 
       // ── By Hour ─────────────────────────────────────────────────────────────
       // Key by local calendar date + hour so rows align with the user's clock.
+      const hourWindowMs = 7 * 24 * 60 * 60 * 1000;
+      const hourCutoff = new Date(Date.now() - hourWindowMs).toISOString();
+      const hourEntries = entries.filter(e => e.timestamp >= hourCutoff);
+
       const hourMap = new Map();
-      for (const e of entries) {
+      for (const e of hourEntries) {
         const d = new Date(e.timestamp);
         const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}`;
         if (!hourMap.has(key)) {
@@ -2590,8 +2598,7 @@
         b.count++;
       }
       const hourRows = [...hourMap.entries()]
-        .sort((a, b) => b[0].localeCompare(a[0]))
-        .slice(0, 48);
+        .sort((a, b) => b[0].localeCompare(a[0]));
 
       const hourEl = document.getElementById('statsByHour');
       if (!hourRows.length) {
