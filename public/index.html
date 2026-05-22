@@ -1897,7 +1897,7 @@
         if (p && !seen.has(p)) { seen.add(p); lines.push(p); }
       }
       if (!lines.length) return;
-      const blob = new Blob([lines.join('\n\n')], { type: 'text/plain' });
+      const blob = new Blob([lines.join('\n\n---\n\n')], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const now = new Date();
       const pad = (n, w = 2) => String(n).padStart(w, '0');
@@ -2119,7 +2119,7 @@
         if (p && !seen.has(p)) { seen.add(p); lines.push(p); }
       }
       if (!lines.length) return;
-      const blob = new Blob([lines.join('\n\n')], { type: 'text/plain' });
+      const blob = new Blob([lines.join('\n\n---\n\n')], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const now = new Date();
       const pad = (n, w = 2) => String(n).padStart(w, '0');
