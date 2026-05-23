@@ -1406,7 +1406,9 @@
       const activeSection = document.getElementById('activeSection');
 
       if (hasQueued) {
-        document.getElementById('queueList').innerHTML = jobQueue.map((job, i) => `
+        document.getElementById('queueList').innerHTML = jobQueue.map((job, i) => ({ job, i }))
+          .reverse()
+          .map(({ job, i }) => `
           <div class="queue-item">
             <span class="queue-pos">${i + 1}</span>
             <span class="queue-wf">${escapeHtml(WF_LABELS[job.workflowType] || job.workflowType)}</span>
