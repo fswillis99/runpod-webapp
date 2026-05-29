@@ -15,19 +15,22 @@ Single-file Node.js/Express server (`server.js`) + a single-page HTML UI (`publi
 ## Key conventions
 
 ### PNG metadata
+
 Every generated image has prompt, workflow type, and LoRA list embedded as **iTXt chunks**. Helper functions `makePngItxtChunk`, `readPngItxtChunks`, and `addPngMetadata` in `server.js` handle encoding/decoding. When uploading an external image, the server reads these chunks to auto-populate library entry fields; if no `prompt` chunk is found, `workflow_type` is set to `"manual"`.
 
 ### Data files
+
 All JSON files are auto-created on first use. They are gitignored and should never be committed.
 
-| File | Contents |
-|---|---|
-| `history.json` | Last 20 generation records (prompt, filename, timestamp, etc.) |
-| `libraries.json` | Library definitions and their entries |
+| File                   | Contents                                                            |
+| ---------------------- | ------------------------------------------------------------------- |
+| `history.json`         | Last 20 generation records (prompt, filename, timestamp, etc.)      |
+| `libraries.json`       | Library definitions and their entries                               |
 | `execution_times.json` | Per-generation timing + RunPod credit balance at time of generation |
-| `trash.json` | Manifest of trashed images (path, original metadata) |
+| `trash.json`           | Manifest of trashed images (path, original metadata)                |
 
 ### API surface
+
 All routes are in `server.js`. Key groups:
 
 - `GET /api/credits` — fetch RunPod account balance
@@ -44,6 +47,7 @@ All routes are in `server.js`. Key groups:
 - `GET /api/status/:jobId` — poll job status
 
 ### Workflow types
+
 `workflowType` values used throughout: `flux`, `qwen2512`, `qwen2511`. The `buildWorkflow` function in `server.js` switches on this value to construct the ComfyUI graph.
 
 ## Development notes
