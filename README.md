@@ -55,11 +55,11 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Workflows
 
-| Workflow | Input | Notes |
-|---|---|---|
-| **Flux Dev** | Prompt, negative prompt, dimensions, steps, guidance | Standard Flux checkpoint |
-| **Qwen-Image 2512** | Prompt, dimensions | Turbo mode (6 steps, Lightning LoRA) |
-| **Qwen-Image 2511** | Prompt + image upload | Image editing, turbo mode (6 steps) |
+| Workflow            | Input                                                | Notes                                |
+| ------------------- | ---------------------------------------------------- | ------------------------------------ |
+| **Flux Dev**        | Prompt, negative prompt, dimensions, steps, guidance | Standard Flux checkpoint             |
+| **Qwen-Image 2512** | Prompt, dimensions                                   | Turbo mode (6 steps, Lightning LoRA) |
+| **Qwen-Image 2511** | Prompt + image upload                                | Image editing, turbo mode (6 steps)  |
 
 ## Inspecting the workflow payload
 

@@ -24,16 +24,17 @@ const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
   for (let i = 0; i < 256; i++) {
     let c = i;
-    for (let k = 0; k < 8; k++) c = (c & 1) ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
     t[i] = c;
   }
   return t;
 })();
 
 function crc32(buf) {
-  let c = 0xFFFFFFFF;
-  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xFF] ^ (c >>> 8);
-  return (c ^ 0xFFFFFFFF) >>> 0;
+  let c = 0xffffffff;
+  for (let i = 0; i < buf.length; i++)
+    c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
 }
 
 // Build a PNG iTXt chunk (supports UTF-8 text)
@@ -44,8 +45,10 @@ function makePngItxtChunk(keyword, text) {
     Buffer.from(String(text), "utf8"),
   ]);
   const type = Buffer.from("iTXt");
-  const len = Buffer.allocUnsafe(4); len.writeUInt32BE(data.length);
-  const crcBuf = Buffer.allocUnsafe(4); crcBuf.writeUInt32BE(crc32(Buffer.concat([type, data])));
+  const len = Buffer.allocUnsafe(4);
+  len.writeUInt32BE(data.length);
+  const crcBuf = Buffer.allocUnsafe(4);
+  crcBuf.writeUInt32BE(crc32(Buffer.concat([type, data])));
   return Buffer.concat([len, type, data, crcBuf]);
 }
 
@@ -80,8 +83,14 @@ function readPngItxtChunks(pngBuf) {
 // Insert iTXt metadata chunks into a PNG buffer (before IEND)
 function addPngMetadata(pngBuf, metadata) {
   const iendPos = pngBuf.length - 12; // IEND is always the last 12 bytes
-  const chunks = Object.entries(metadata).map(([k, v]) => makePngItxtChunk(k, v));
-  return Buffer.concat([pngBuf.slice(0, iendPos), ...chunks, pngBuf.slice(iendPos)]);
+  const chunks = Object.entries(metadata).map(([k, v]) =>
+    makePngItxtChunk(k, v),
+  );
+  return Buffer.concat([
+    pngBuf.slice(0, iendPos),
+    ...chunks,
+    pngBuf.slice(iendPos),
+  ]);
 }
 
 function saveImageFile(filename, base64, metadata) {
@@ -129,12 +138,16 @@ app.get("/api/fetch-image", async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: "url required" });
   try {
-    const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+    const response = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+    });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const contentType = response.headers.get("content-type") || "image/png";
-    if (!contentType.startsWith("image/")) throw new Error("URL did not return an image");
+    if (!contentType.startsWith("image/"))
+      throw new Error("URL did not return an image");
     const buffer = await response.buffer();
-    if (buffer.length > 15 * 1024 * 1024) throw new Error("Image too large (max 15 MB)");
+    if (buffer.length > 15 * 1024 * 1024)
+      throw new Error("Image too large (max 15 MB)");
     res.json({ data: buffer.toString("base64"), contentType });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -150,7 +163,8 @@ app.get("/api/download", (req, res) => {
   const rel = req.query.path;
   if (!rel || typeof rel !== "string") return res.status(400).end();
   const normalized = path.normalize(rel);
-  if (normalized.startsWith("..") || path.isAbsolute(normalized)) return res.status(403).end();
+  if (normalized.startsWith("..") || path.isAbsolute(normalized))
+    return res.status(403).end();
   const abs = path.join(IMAGES_DIR, normalized);
   res.download(abs, path.basename(abs), (err) => {
     if (err && !res.headersSent) res.status(404).end();
@@ -189,7 +203,10 @@ function migrateHistory() {
           loras: Array.isArray(entry.loras) ? entry.loras.join(",") : "",
         });
       } catch (err) {
-        console.warn(`Failed to migrate image for entry ${entry.id}:`, err.message);
+        console.warn(
+          `Failed to migrate image for entry ${entry.id}:`,
+          err.message,
+        );
       }
       delete entry.image;
       changed = true;
@@ -209,8 +226,11 @@ const EXEC_TIMES_FILE = path.join(__dirname, "execution_times.json");
 const EXEC_TIMES_RETENTION_MS = 60 * 24 * 60 * 60 * 1000;
 
 function loadExecTimes() {
-  try { return JSON.parse(fs.readFileSync(EXEC_TIMES_FILE, "utf8")); }
-  catch { return []; }
+  try {
+    return JSON.parse(fs.readFileSync(EXEC_TIMES_FILE, "utf8"));
+  } catch {
+    return [];
+  }
 }
 
 function saveExecTimes(times) {
@@ -220,7 +240,7 @@ function saveExecTimes(times) {
 function pruneExecTimes() {
   const times = loadExecTimes();
   const cutoff = new Date(Date.now() - EXEC_TIMES_RETENTION_MS).toISOString();
-  const kept = times.filter(t => t.timestamp >= cutoff);
+  const kept = times.filter((t) => t.timestamp >= cutoff);
   if (kept.length !== times.length) saveExecTimes(kept);
 }
 
@@ -229,8 +249,13 @@ function migrateExecTimes() {
   if (fs.existsSync(EXEC_TIMES_FILE)) return;
   const history = loadHistory();
   const times = history
-    .filter(e => e.execution_time != null)
-    .map(e => ({ id: e.id, timestamp: e.timestamp, execution_time: e.execution_time, workflow_type: e.workflow_type || null }));
+    .filter((e) => e.execution_time != null)
+    .map((e) => ({
+      id: e.id,
+      timestamp: e.timestamp,
+      execution_time: e.execution_time,
+      workflow_type: e.workflow_type || null,
+    }));
   saveExecTimes(times);
 }
 
@@ -243,15 +268,19 @@ app.get("/api/execution-times", (req, res) => {
 
 app.post("/api/execution-times", async (req, res) => {
   const { timestamp, execution_time, workflow_type } = req.body;
-  if (execution_time == null || !timestamp) return res.status(400).json({ error: "missing fields" });
+  if (execution_time == null || !timestamp)
+    return res.status(400).json({ error: "missing fields" });
 
   let balance = null;
   try {
-    const bRes = await fetch(`https://api.runpod.io/graphql?api_key=${API_KEY}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: "{ myself { clientBalance } }" }),
-    });
+    const bRes = await fetch(
+      `https://api.runpod.io/graphql?api_key=${API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: "{ myself { clientBalance } }" }),
+      },
+    );
     const bData = await bRes.json();
     const raw = bData.data?.myself?.clientBalance ?? null;
     balance = raw !== null ? parseFloat(raw.toFixed(2)) : null;
@@ -260,9 +289,15 @@ app.post("/api/execution-times", async (req, res) => {
   }
 
   const times = loadExecTimes();
-  times.unshift({ id: Date.now(), timestamp, execution_time, workflow_type: workflow_type || null, balance });
+  times.unshift({
+    id: Date.now(),
+    timestamp,
+    execution_time,
+    workflow_type: workflow_type || null,
+    balance,
+  });
   const cutoff = new Date(Date.now() - EXEC_TIMES_RETENTION_MS).toISOString();
-  const pruned = times.filter(t => t.timestamp >= cutoff);
+  const pruned = times.filter((t) => t.timestamp >= cutoff);
   saveExecTimes(pruned);
   res.json({ ok: true });
 });
@@ -274,8 +309,11 @@ const TRASH_FILE = path.join(__dirname, "trash.json");
 const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 function loadTrash() {
-  try { return JSON.parse(fs.readFileSync(TRASH_FILE, "utf8")); }
-  catch { return []; }
+  try {
+    return JSON.parse(fs.readFileSync(TRASH_FILE, "utf8"));
+  } catch {
+    return [];
+  }
 }
 
 function saveTrash(entries) {
@@ -285,7 +323,9 @@ function saveTrash(entries) {
 // Returns a trashId (number) that has no existing subdirectory in TRASH_DIR.
 function generateTrashId() {
   let id;
-  do { id = Date.now(); } while (fs.existsSync(path.join(TRASH_DIR, String(id))));
+  do {
+    id = Date.now();
+  } while (fs.existsSync(path.join(TRASH_DIR, String(id))));
   return id;
 }
 
@@ -320,21 +360,33 @@ app.get("/api/trash", (req, res) => res.json(loadTrash()));
 
 // Insert entry into a newest-first array at the correct chronological position.
 function insertByDate(arr, entry) {
-  const idx = arr.findIndex(e => e.id < entry.id);
-  if (idx === -1) arr.push(entry); else arr.splice(idx, 0, entry);
+  const idx = arr.findIndex((e) => e.id < entry.id);
+  if (idx === -1) arr.push(entry);
+  else arr.splice(idx, 0, entry);
 }
 
 app.post("/api/trash/:trashId/restore", (req, res) => {
   const trashId = parseInt(req.params.trashId, 10);
   const trash = loadTrash();
-  const entry = trash.find(e => e.trashId === trashId);
+  const entry = trash.find((e) => e.trashId === trashId);
   if (!entry) return res.status(404).json({ error: "trash entry not found" });
 
   const trashEntryDir = path.join(TRASH_DIR, String(trashId));
-  const { source, libId, libName, libSlug, trashId: _tid, deletedAt: _da, ...originalEntry } = entry;
+  const {
+    source,
+    libId,
+    libName,
+    libSlug,
+    trashId: _tid,
+    deletedAt: _da,
+    ...originalEntry
+  } = entry;
 
   const moveBack = (dstDir) => {
-    const files = [originalEntry.filename, ...(originalEntry.input_images || [])].filter(Boolean);
+    const files = [
+      originalEntry.filename,
+      ...(originalEntry.input_images || []),
+    ].filter(Boolean);
     for (const f of files) {
       const src = path.join(trashEntryDir, f);
       if (fs.existsSync(src)) fs.renameSync(src, path.join(dstDir, f));
@@ -344,26 +396,30 @@ app.post("/api/trash/:trashId/restore", (req, res) => {
   if (source === "history") {
     moveBack(IMAGES_DIR);
     const history = loadHistory();
-    if (!history.some(e => e.id === originalEntry.id)) {
+    if (!history.some((e) => e.id === originalEntry.id)) {
       insertByDate(history, originalEntry);
       if (history.length > MAX_HISTORY) history.splice(MAX_HISTORY);
       saveHistory(history);
     }
   } else {
     const libs = loadLibraries();
-    const lib = libs.find(l => l.id === libId);
+    const lib = libs.find((l) => l.id === libId);
     if (lib) {
       const dir = libDir(lib);
       fs.mkdirSync(dir, { recursive: true });
       moveBack(dir);
       lib.entries = lib.entries || [];
-      if (!lib.entries.some(e => e.id === originalEntry.id)) {
+      if (!lib.entries.some((e) => e.id === originalEntry.id)) {
         insertByDate(lib.entries, originalEntry);
       }
       saveLibraries(libs);
     } else {
       // Library gone — recreate it with the original slug and name
-      const slug = libSlug || nameToSlug(libName || "restored") + "-" + String(Math.floor(1000 + Math.random() * 9000));
+      const slug =
+        libSlug ||
+        nameToSlug(libName || "restored") +
+          "-" +
+          String(Math.floor(1000 + Math.random() * 9000));
       const newLib = { id: libId, name: libName || slug, slug, entries: [] };
       const dir = path.join(LIB_DIR, slug);
       fs.mkdirSync(dir, { recursive: true });
@@ -374,8 +430,9 @@ app.post("/api/trash/:trashId/restore", (req, res) => {
     }
   }
 
-  if (fs.existsSync(trashEntryDir)) fs.rmSync(trashEntryDir, { recursive: true, force: true });
-  saveTrash(trash.filter(e => e.trashId !== trashId));
+  if (fs.existsSync(trashEntryDir))
+    fs.rmSync(trashEntryDir, { recursive: true, force: true });
+  saveTrash(trash.filter((e) => e.trashId !== trashId));
 
   res.json({ ok: true, restored_to: source });
 });
@@ -383,10 +440,11 @@ app.post("/api/trash/:trashId/restore", (req, res) => {
 app.delete("/api/trash/:trashId", (req, res) => {
   const trashId = parseInt(req.params.trashId, 10);
   const trash = loadTrash();
-  if (!trash.some(e => e.trashId === trashId)) return res.status(404).json({ error: "not found" });
+  if (!trash.some((e) => e.trashId === trashId))
+    return res.status(404).json({ error: "not found" });
   const dir = path.join(TRASH_DIR, String(trashId));
   if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
-  saveTrash(trash.filter(e => e.trashId !== trashId));
+  saveTrash(trash.filter((e) => e.trashId !== trashId));
   res.json({ ok: true });
 });
 
@@ -405,8 +463,17 @@ app.get("/api/history", (req, res) => {
 });
 
 app.post("/api/history", (req, res) => {
-  const { prompt, negative_prompt, workflow_type, loras, filename, image, input_images, timestamp, execution_time } =
-    req.body;
+  const {
+    prompt,
+    negative_prompt,
+    workflow_type,
+    loras,
+    filename,
+    image,
+    input_images,
+    timestamp,
+    execution_time,
+  } = req.body;
   const id = Date.now();
   if (image && filename) {
     saveImageFile(filename, image, {
@@ -424,7 +491,10 @@ app.post("/api/history", (req, res) => {
       if (!img?.data) continue;
       const inputFilename = `${base}-in${i + 1}.png`;
       try {
-        fs.writeFileSync(path.join(IMAGES_DIR, inputFilename), Buffer.from(img.data, "base64"));
+        fs.writeFileSync(
+          path.join(IMAGES_DIR, inputFilename),
+          Buffer.from(img.data, "base64"),
+        );
         savedInputFiles.push(inputFilename);
       } catch (err) {
         console.warn(`Failed to save input image ${i + 1}:`, err.message);
@@ -432,7 +502,16 @@ app.post("/api/history", (req, res) => {
     }
   }
   const history = loadHistory();
-  const entry = { id, timestamp, prompt, negative_prompt, workflow_type, loras, filename, execution_time: execution_time ?? null };
+  const entry = {
+    id,
+    timestamp,
+    prompt,
+    negative_prompt,
+    workflow_type,
+    loras,
+    filename,
+    execution_time: execution_time ?? null,
+  };
   if (savedInputFiles.length > 0) entry.input_images = savedInputFiles;
   history.unshift(entry);
   if (history.length > MAX_HISTORY) history.splice(MAX_HISTORY);
@@ -443,15 +522,25 @@ app.post("/api/history", (req, res) => {
 app.delete("/api/history/:id", (req, res) => {
   const id = parseInt(req.params.id, 10);
   const history = loadHistory();
-  const entry = history.find(e => e.id === id);
-  saveHistory(history.filter(e => e.id !== id));
+  const entry = history.find((e) => e.id === id);
+  saveHistory(history.filter((e) => e.id !== id));
   if (entry) {
     const trashId = generateTrashId();
     const trashEntryDir = path.join(TRASH_DIR, String(trashId));
-    const files = [entry.filename, ...(entry.input_images || [])].filter(Boolean);
+    const files = [entry.filename, ...(entry.input_images || [])].filter(
+      Boolean,
+    );
     moveFilesToTrash(IMAGES_DIR, files, trashEntryDir);
     const trash = loadTrash();
-    trash.push({ ...entry, trashId, deletedAt: new Date().toISOString(), source: "history", libId: null, libName: null, libSlug: null });
+    trash.push({
+      ...entry,
+      trashId,
+      deletedAt: new Date().toISOString(),
+      source: "history",
+      libId: null,
+      libName: null,
+      libSlug: null,
+    });
     saveTrash(trash);
   }
   res.json({ ok: true });
@@ -463,15 +552,26 @@ app.delete("/api/history/:id", (req, res) => {
 const LIBRARIES_FILE = path.join(__dirname, "libraries.json");
 
 function loadLibraries() {
-  try { return JSON.parse(fs.readFileSync(LIBRARIES_FILE, "utf8")); }
-  catch { return []; }
+  try {
+    return JSON.parse(fs.readFileSync(LIBRARIES_FILE, "utf8"));
+  } catch {
+    return [];
+  }
 }
-function saveLibraries(libs) { fs.writeFileSync(LIBRARIES_FILE, JSON.stringify(libs)); }
+function saveLibraries(libs) {
+  fs.writeFileSync(LIBRARIES_FILE, JSON.stringify(libs));
+}
 
 // Derive a safe cross-platform directory name from a library name.
 // Keeps only alphanumerics and hyphens, collapses runs, trims ends.
 function nameToSlug(name) {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50) || "library";
+  return (
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 50) || "library"
+  );
 }
 
 // Resolve the filesystem directory for a library, with fallback for
@@ -489,7 +589,8 @@ app.post("/api/libraries", (req, res) => {
   // Append 4 random digits to guarantee uniqueness even for identical names.
   let slug;
   do {
-    slug = nameToSlug(name) + "-" + String(Math.floor(1000 + Math.random() * 9000));
+    slug =
+      nameToSlug(name) + "-" + String(Math.floor(1000 + Math.random() * 9000));
   } while (fs.existsSync(path.join(LIB_DIR, slug)));
   fs.mkdirSync(path.join(LIB_DIR, slug), { recursive: true });
   const libs = loadLibraries();
@@ -501,17 +602,27 @@ app.post("/api/libraries", (req, res) => {
 app.delete("/api/libraries/:id", (req, res) => {
   const id = parseInt(req.params.id, 10);
   const libs = loadLibraries();
-  const lib = libs.find(l => l.id === id);
-  saveLibraries(libs.filter(l => l.id !== id));
+  const lib = libs.find((l) => l.id === id);
+  saveLibraries(libs.filter((l) => l.id !== id));
   if (lib) {
     const dir = libDir(lib);
     const trash = loadTrash();
-    for (const entry of (lib.entries || [])) {
+    for (const entry of lib.entries || []) {
       const trashId = generateTrashId();
       const trashEntryDir = path.join(TRASH_DIR, String(trashId));
-      const files = [entry.filename, ...(entry.input_images || [])].filter(Boolean);
+      const files = [entry.filename, ...(entry.input_images || [])].filter(
+        Boolean,
+      );
       moveFilesToTrash(dir, files, trashEntryDir);
-      trash.push({ ...entry, trashId, deletedAt: new Date().toISOString(), source: "library", libId: id, libName: lib.name, libSlug: lib.slug || String(id) });
+      trash.push({
+        ...entry,
+        trashId,
+        deletedAt: new Date().toISOString(),
+        source: "library",
+        libId: id,
+        libName: lib.name,
+        libSlug: lib.slug || String(id),
+      });
     }
     if ((lib.entries || []).length) saveTrash(trash);
     if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
@@ -524,11 +635,22 @@ app.delete("/api/libraries/:id", (req, res) => {
 app.post("/api/libraries/:id/entries", (req, res) => {
   const libId = parseInt(req.params.id, 10);
   const libs = loadLibraries();
-  const lib = libs.find(l => l.id === libId);
+  const lib = libs.find((l) => l.id === libId);
   if (!lib) return res.status(404).json({ error: "library not found" });
 
-  const { filename, input_images, source_lib_id, prompt, negative_prompt, workflow_type, loras, timestamp } = req.body;
-  const srcLib = source_lib_id ? libs.find(l => l.id === source_lib_id) : null;
+  const {
+    filename,
+    input_images,
+    source_lib_id,
+    prompt,
+    negative_prompt,
+    workflow_type,
+    loras,
+    timestamp,
+  } = req.body;
+  const srcLib = source_lib_id
+    ? libs.find((l) => l.id === source_lib_id)
+    : null;
   const srcDir = srcLib ? libDir(srcLib) : IMAGES_DIR;
   const dstDir = libDir(lib);
   fs.mkdirSync(dstDir, { recursive: true });
@@ -545,12 +667,20 @@ app.post("/api/libraries/:id/entries", (req, res) => {
   const copiedInputs = (input_images || []).filter(safeCopy);
 
   lib.entries = lib.entries || [];
-  if (filename && lib.entries.some(e => e.filename === filename)) {
-    return res.status(409).json({ error: 'duplicate' });
+  if (filename && lib.entries.some((e) => e.filename === filename)) {
+    return res.status(409).json({ error: "duplicate" });
   }
 
   const entryId = Date.now();
-  const entry = { id: entryId, timestamp: timestamp || new Date().toISOString(), filename, prompt, negative_prompt, workflow_type, loras };
+  const entry = {
+    id: entryId,
+    timestamp: timestamp || new Date().toISOString(),
+    filename,
+    prompt,
+    negative_prompt,
+    workflow_type,
+    loras,
+  };
   if (copiedInputs.length) entry.input_images = copiedInputs;
   lib.entries.unshift(entry);
   saveLibraries(libs);
@@ -561,18 +691,28 @@ app.delete("/api/libraries/:libId/entries/:entryId", (req, res) => {
   const libId = parseInt(req.params.libId, 10);
   const entryId = parseInt(req.params.entryId, 10);
   const libs = loadLibraries();
-  const lib = libs.find(l => l.id === libId);
+  const lib = libs.find((l) => l.id === libId);
   if (!lib) return res.status(404).json({ error: "library not found" });
-  const entry = (lib.entries || []).find(e => e.id === entryId);
-  lib.entries = (lib.entries || []).filter(e => e.id !== entryId);
+  const entry = (lib.entries || []).find((e) => e.id === entryId);
+  lib.entries = (lib.entries || []).filter((e) => e.id !== entryId);
   saveLibraries(libs);
   if (entry) {
     const trashId = generateTrashId();
     const trashEntryDir = path.join(TRASH_DIR, String(trashId));
-    const files = [entry.filename, ...(entry.input_images || [])].filter(Boolean);
+    const files = [entry.filename, ...(entry.input_images || [])].filter(
+      Boolean,
+    );
     moveFilesToTrash(libDir(lib), files, trashEntryDir);
     const trash = loadTrash();
-    trash.push({ ...entry, trashId, deletedAt: new Date().toISOString(), source: "library", libId, libName: lib.name, libSlug: lib.slug || String(libId) });
+    trash.push({
+      ...entry,
+      trashId,
+      deletedAt: new Date().toISOString(),
+      source: "library",
+      libId,
+      libName: lib.name,
+      libSlug: lib.slug || String(libId),
+    });
     saveTrash(trash);
   }
   res.json({ ok: true });
@@ -583,7 +723,7 @@ app.delete("/api/libraries/:libId/entries/:entryId", (req, res) => {
 app.post("/api/libraries/:id/upload", (req, res) => {
   const libId = parseInt(req.params.id, 10);
   const libs = loadLibraries();
-  const lib = libs.find(l => l.id === libId);
+  const lib = libs.find((l) => l.id === libId);
   if (!lib) return res.status(404).json({ error: "library not found" });
 
   const { image, original_filename } = req.body;
@@ -593,8 +733,15 @@ app.post("/api/libraries/:id/upload", (req, res) => {
   const dstDir = libDir(lib);
   fs.mkdirSync(dstDir, { recursive: true });
 
-  let prompt = "", workflow_type = "", loras = [];
-  const isPng = buf.length >= 4 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47;
+  let prompt = "",
+    workflow_type = "",
+    loras = [];
+  const isPng =
+    buf.length >= 4 &&
+    buf[0] === 0x89 &&
+    buf[1] === 0x50 &&
+    buf[2] === 0x4e &&
+    buf[3] === 0x47;
   if (isPng) {
     try {
       const meta = readPngItxtChunks(buf);
@@ -611,7 +758,9 @@ app.post("/api/libraries/:id/upload", (req, res) => {
   const now = new Date();
   const pad = (n, w = 2) => String(n).padStart(w, "0");
   const ts = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-  const ext = original_filename ? (path.extname(original_filename).toLowerCase() || ".png") : ".png";
+  const ext = original_filename
+    ? path.extname(original_filename).toLowerCase() || ".png"
+    : ".png";
   let filename = `upload-${ts}${ext}`;
   let n = 1;
   while (fs.existsSync(path.join(dstDir, filename))) {
@@ -623,7 +772,14 @@ app.post("/api/libraries/:id/upload", (req, res) => {
 
   lib.entries = lib.entries || [];
   const entryId = Date.now();
-  const entry = { id: entryId, timestamp: now.toISOString(), filename, prompt, workflow_type, loras };
+  const entry = {
+    id: entryId,
+    timestamp: now.toISOString(),
+    filename,
+    prompt,
+    workflow_type,
+    loras,
+  };
   lib.entries.unshift(entry);
   saveLibraries(libs);
   res.json({ ok: true, entryId, filename, workflow_type });
@@ -637,33 +793,41 @@ const IMAGE_EXT_RE = /\.(png|jpg|jpeg|webp)$/i;
 app.post("/api/libraries/:id/import", (req, res) => {
   const libId = parseInt(req.params.id, 10);
   const libs = loadLibraries();
-  const lib = libs.find(l => l.id === libId);
+  const lib = libs.find((l) => l.id === libId);
   if (!lib) return res.status(404).json({ error: "library not found" });
 
   const dir = libDir(lib);
-  if (!fs.existsSync(dir)) return res.json({ ok: true, imported: 0, skipped: 0 });
+  if (!fs.existsSync(dir))
+    return res.json({ ok: true, imported: 0, skipped: 0 });
 
   let allFiles;
   try {
-    allFiles = fs.readdirSync(dir).filter(f => IMAGE_EXT_RE.test(f));
+    allFiles = fs.readdirSync(dir).filter((f) => IMAGE_EXT_RE.test(f));
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
 
-  const mainImages = allFiles.filter(f => !INPUT_SIDECAR_RE.test(f));
+  const mainImages = allFiles.filter((f) => !INPUT_SIDECAR_RE.test(f));
   lib.entries = lib.entries || [];
-  const existing = new Set(lib.entries.map(e => e.filename));
+  const existing = new Set(lib.entries.map((e) => e.filename));
 
   let imported = 0;
   let skipped = 0;
 
   for (const filename of mainImages) {
-    if (existing.has(filename)) { skipped++; continue; }
+    if (existing.has(filename)) {
+      skipped++;
+      continue;
+    }
 
-    let prompt = "", workflow_type = "", loras = [];
+    let prompt = "",
+      workflow_type = "",
+      loras = [];
     if (/\.png$/i.test(filename)) {
       try {
-        const meta = readPngItxtChunks(fs.readFileSync(path.join(dir, filename)));
+        const meta = readPngItxtChunks(
+          fs.readFileSync(path.join(dir, filename)),
+        );
         prompt = meta.prompt || "";
         workflow_type = meta.workflow_type || "";
         loras = meta.loras ? meta.loras.split(",").filter(Boolean) : [];
@@ -676,8 +840,13 @@ app.post("/api/libraries/:id/import", (req, res) => {
     const base = filename.replace(/\.[^.]+$/, "");
     const inputImages = [];
     for (let n = 1; ; n++) {
-      const sidecar = allFiles.find(f => f === `${base}-in${n}.png` ||
-        f === `${base}-in${n}.jpg` || f === `${base}-in${n}.jpeg` || f === `${base}-in${n}.webp`);
+      const sidecar = allFiles.find(
+        (f) =>
+          f === `${base}-in${n}.png` ||
+          f === `${base}-in${n}.jpg` ||
+          f === `${base}-in${n}.jpeg` ||
+          f === `${base}-in${n}.webp`,
+      );
       if (!sidecar) break;
       inputImages.push(sidecar);
     }
@@ -707,10 +876,22 @@ app.post("/api/libraries/:id/import", (req, res) => {
 // Custom LoRAs available for both Qwen workflows (toggled from the UI).
 // Node IDs 1000–1003 are reserved for these (one slot per entry).
 const CUSTOM_LORAS = [
-  { id: "Qwen4Play", lora_name: "Qwen4Play-2512.1_e10.safetensors",     strength_model: 1   },
-  { id: "nsfw_adv",  lora_name: "qwen-image_nsfw_adv_v1.0.safetensors", strength_model: 0.6 },
-  { id: "spanking",  lora_name: "spanking_Qwen-dim64-v1.safetensors",   strength_model: 1   },
-  { id: "Korean",    lora_name: "Korean_qwen.safetensors",               strength_model: 0.6 },
+  {
+    id: "Qwen4Play",
+    lora_name: "Qwen4Play-2512.1_e10.safetensors",
+    strength_model: 1,
+  },
+  {
+    id: "nsfw_adv",
+    lora_name: "qwen-image_nsfw_adv_v1.0.safetensors",
+    strength_model: 0.6,
+  },
+  {
+    id: "spanking",
+    lora_name: "spanking_Qwen-dim64-v1.safetensors",
+    strength_model: 1,
+  },
+  { id: "Korean", lora_name: "Korean_qwen.safetensors", strength_model: 0.6 },
 ];
 
 // Appends enabled LoRA nodes to `workflow`, chained from `startRef`.
@@ -722,7 +903,11 @@ function buildLoraChain(workflow, startRef, selectedLoras = []) {
       const nodeId = String(1000 + i);
       workflow[nodeId] = {
         class_type: "LoraLoaderModelOnly",
-        inputs: { model: prevRef, lora_name: lora.lora_name, strength_model: lora.strength_model },
+        inputs: {
+          model: prevRef,
+          lora_name: lora.lora_name,
+          strength_model: lora.strength_model,
+        },
       };
       prevRef = [nodeId, 0];
     }
@@ -809,7 +994,10 @@ function buildWorkflowQwen2512({
   const workflow = {
     219: {
       class_type: "CLIPLoader",
-      inputs: { clip_name: "qwen_2.5_vl_7b_fp8_scaled.safetensors", type: "qwen_image" },
+      inputs: {
+        clip_name: "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+        type: "qwen_image",
+      },
     },
     220: {
       class_type: "VAELoader",
@@ -817,11 +1005,18 @@ function buildWorkflowQwen2512({
     },
     226: {
       class_type: "UNETLoader",
-      inputs: { unet_name: "qwen_image_2512_fp8_e4m3fn.safetensors", weight_dtype: "default" },
+      inputs: {
+        unet_name: "qwen_image_2512_fp8_e4m3fn.safetensors",
+        weight_dtype: "default",
+      },
     },
     221: {
       class_type: "LoraLoaderModelOnly",
-      inputs: { model: ["226", 0], lora_name: "Qwen-Image-2512-Lightning-4steps-V1.0-fp32.safetensors", strength_model: 1 },
+      inputs: {
+        model: ["226", 0],
+        lora_name: "Qwen-Image-2512-Lightning-4steps-V1.0-fp32.safetensors",
+        strength_model: 1,
+      },
     },
     227: {
       class_type: "CLIPTextEncode",
@@ -829,7 +1024,10 @@ function buildWorkflowQwen2512({
     },
     228: {
       class_type: "CLIPTextEncode",
-      inputs: { text: negative_prompt || "低分辨率，低画质，肢体畸形，手指畸形", clip: ["219", 0] },
+      inputs: {
+        text: negative_prompt || "低分辨率，低画质，肢体畸形，手指畸形",
+        clip: ["219", 0],
+      },
     },
     232: {
       class_type: "EmptySD3LatentImage",
@@ -858,44 +1056,132 @@ function buildWorkflowQwen2512({
       denoise: 1,
     },
   };
-  workflow[231] = { class_type: "VAEDecode", inputs: { samples: ["230", 0], vae: ["220", 0] } };
-  workflow[60]  = { class_type: "SaveImage",  inputs: { images: ["231", 0], filename_prefix: "ComfyUI" } };
+  workflow[231] = {
+    class_type: "VAEDecode",
+    inputs: { samples: ["230", 0], vae: ["220", 0] },
+  };
+  workflow[60] = {
+    class_type: "SaveImage",
+    inputs: { images: ["231", 0], filename_prefix: "ComfyUI" },
+  };
   return workflow;
 }
 
 // Qwen-Image 2511 — image edit with 1–3 reference images
-function buildWorkflowQwen2511({ prompt, negative_prompt, image_filenames = [], seed, loras = [] }) {
-  const fnames = image_filenames.length > 0 ? image_filenames.slice(0, 3) : ["input1.png"];
+function buildWorkflowQwen2511({
+  prompt,
+  negative_prompt,
+  image_filenames = [],
+  seed,
+  loras = [],
+}) {
+  const fnames =
+    image_filenames.length > 0 ? image_filenames.slice(0, 3) : ["input1.png"];
 
   const workflow = {
-    162: { class_type: "CLIPLoader", inputs: { clip_name: "qwen_2.5_vl_7b_fp8_scaled.safetensors", type: "qwen_image" } },
-    146: { class_type: "VAELoader",  inputs: { vae_name: "qwen_image_vae.safetensors" } },
-    161: { class_type: "UNETLoader", inputs: { unet_name: "qwen_image_edit_2511_bf16.safetensors", weight_dtype: "default" } },
+    162: {
+      class_type: "CLIPLoader",
+      inputs: {
+        clip_name: "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+        type: "qwen_image",
+      },
+    },
+    146: {
+      class_type: "VAELoader",
+      inputs: { vae_name: "qwen_image_vae.safetensors" },
+    },
+    161: {
+      class_type: "UNETLoader",
+      inputs: {
+        unet_name: "qwen_image_edit_2511_bf16.safetensors",
+        weight_dtype: "default",
+      },
+    },
   };
 
   // TextEncodeQwenImageEditPlus takes one scaled image per slot (image1/image2/image3).
   // No "original" needed — the reference workflow confirms only the scaled output is passed.
-  const nodePairs = [[83, 500], [501, 502], [503, 504]];
+  const nodePairs = [
+    [83, 500],
+    [501, 502],
+    [503, 504],
+  ];
   const condImageInputs = {};
 
   fnames.forEach((fname, i) => {
     const [loadId, scaleId] = nodePairs[i];
-    workflow[loadId]  = { class_type: "LoadImage",             inputs: { image: fname, upload: "image" } };
-    workflow[scaleId] = { class_type: "FluxKontextImageScale", inputs: { image: [String(loadId), 0] } };
+    workflow[loadId] = {
+      class_type: "LoadImage",
+      inputs: { image: fname, upload: "image" },
+    };
+    workflow[scaleId] = {
+      class_type: "FluxKontextImageScale",
+      inputs: { image: [String(loadId), 0] },
+    };
     condImageInputs[`image${i + 1}`] = [String(scaleId), 0]; // image1, image2, image3
   });
 
   const firstScaleId = String(nodePairs[0][1]);
-  workflow[149] = { class_type: "TextEncodeQwenImageEditPlus", inputs: { prompt: negative_prompt || "", clip: ["162", 0], vae: ["146", 0], ...condImageInputs } };
-  workflow[151] = { class_type: "TextEncodeQwenImageEditPlus", inputs: { prompt: prompt || "", clip: ["162", 0], vae: ["146", 0], ...condImageInputs } };
-  workflow[147] = { class_type: "FluxKontextMultiReferenceLatentMethod", inputs: { conditioning: ["149", 0], reference_latents_method: "index_timestep_zero" } };
-  workflow[148] = { class_type: "FluxKontextMultiReferenceLatentMethod", inputs: { conditioning: ["151", 0], reference_latents_method: "index_timestep_zero" } };
-  workflow[145] = { class_type: "ModelSamplingAuraFlow", inputs: { model: ["161", 0], shift: 3.1 } };
-  workflow[152] = { class_type: "CFGNorm",               inputs: { model: ["145", 0], strength: 1 } };
-  workflow[153] = { class_type: "LoraLoaderModelOnly",   inputs: { model: ["152", 0], lora_name: "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors", strength_model: 1 } };
-  workflow[156] = { class_type: "VAEEncode",             inputs: { pixels: [firstScaleId, 0], vae: ["146", 0] } };
-  workflow[158] = { class_type: "VAEDecode",             inputs: { samples: ["169", 0], vae: ["146", 0] } };
-  workflow[9]   = { class_type: "SaveImage",             inputs: { images: ["158", 0], filename_prefix: "ComfyUI" } };
+  workflow[149] = {
+    class_type: "TextEncodeQwenImageEditPlus",
+    inputs: {
+      prompt: negative_prompt || "",
+      clip: ["162", 0],
+      vae: ["146", 0],
+      ...condImageInputs,
+    },
+  };
+  workflow[151] = {
+    class_type: "TextEncodeQwenImageEditPlus",
+    inputs: {
+      prompt: prompt || "",
+      clip: ["162", 0],
+      vae: ["146", 0],
+      ...condImageInputs,
+    },
+  };
+  workflow[147] = {
+    class_type: "FluxKontextMultiReferenceLatentMethod",
+    inputs: {
+      conditioning: ["149", 0],
+      reference_latents_method: "index_timestep_zero",
+    },
+  };
+  workflow[148] = {
+    class_type: "FluxKontextMultiReferenceLatentMethod",
+    inputs: {
+      conditioning: ["151", 0],
+      reference_latents_method: "index_timestep_zero",
+    },
+  };
+  workflow[145] = {
+    class_type: "ModelSamplingAuraFlow",
+    inputs: { model: ["161", 0], shift: 3.1 },
+  };
+  workflow[152] = {
+    class_type: "CFGNorm",
+    inputs: { model: ["145", 0], strength: 1 },
+  };
+  workflow[153] = {
+    class_type: "LoraLoaderModelOnly",
+    inputs: {
+      model: ["152", 0],
+      lora_name: "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+      strength_model: 1,
+    },
+  };
+  workflow[156] = {
+    class_type: "VAEEncode",
+    inputs: { pixels: [firstScaleId, 0], vae: ["146", 0] },
+  };
+  workflow[158] = {
+    class_type: "VAEDecode",
+    inputs: { samples: ["169", 0], vae: ["146", 0] },
+  };
+  workflow[9] = {
+    class_type: "SaveImage",
+    inputs: { images: ["158", 0], filename_prefix: "ComfyUI" },
+  };
 
   const finalModelRef = buildLoraChain(workflow, ["153", 0], loras);
   workflow[169] = {
@@ -906,7 +1192,11 @@ function buildWorkflowQwen2511({ prompt, negative_prompt, image_filenames = [], 
       negative: ["147", 0],
       latent_image: ["156", 0],
       seed: seed ?? Math.floor(Math.random() * 2 ** 32),
-      steps: 6, cfg: 1, sampler_name: "euler", scheduler: "simple", denoise: 1,
+      steps: 6,
+      cfg: 1,
+      sampler_name: "euler",
+      scheduler: "simple",
+      denoise: 1,
     },
   };
   return workflow;
@@ -931,21 +1221,49 @@ app.post("/api/preview-workflow", (req, res) => {
   let workflow, input;
 
   if (workflowType === "qwen2512") {
-    workflow = buildWorkflowQwen2512({ prompt, negative_prompt, width, height, seed, loras });
+    workflow = buildWorkflowQwen2512({
+      prompt,
+      negative_prompt,
+      width,
+      height,
+      seed,
+      loras,
+    });
     workflow["60"].inputs.filename_prefix = buildFilenamePrefix("qwen2512");
     input = { workflow };
   } else if (workflowType === "qwen2511") {
-    const imgs = (Array.isArray(req.body.images) ? req.body.images : []).slice(0, 3);
-    const image_filenames = imgs.map((img, i) => img.name || `input${i + 1}.png`);
-    workflow = buildWorkflowQwen2511({ prompt, negative_prompt, image_filenames, seed, loras });
+    const imgs = (Array.isArray(req.body.images) ? req.body.images : []).slice(
+      0,
+      3,
+    );
+    const image_filenames = imgs.map(
+      (img, i) => img.name || `input${i + 1}.png`,
+    );
+    workflow = buildWorkflowQwen2511({
+      prompt,
+      negative_prompt,
+      image_filenames,
+      seed,
+      loras,
+    });
     workflow["9"].inputs.filename_prefix = buildFilenamePrefix("qwen2511");
     input = {
       workflow,
-      images: imgs.map(img => ({ name: img.name, image: img.data })),
+      images: imgs.map((img) => ({ name: img.name, image: img.data })),
     };
   } else {
-    workflow = buildWorkflowFlux({ prompt, negative_prompt, width, height, steps, guidance, seed });
-    workflow["8"].inputs.filename_prefix = buildFilenamePrefix(MODEL_NAME.replace(/\.[^.]+$/, ""));
+    workflow = buildWorkflowFlux({
+      prompt,
+      negative_prompt,
+      width,
+      height,
+      steps,
+      guidance,
+      seed,
+    });
+    workflow["8"].inputs.filename_prefix = buildFilenamePrefix(
+      MODEL_NAME.replace(/\.[^.]+$/, ""),
+    );
     input = { workflow };
   }
 
@@ -979,13 +1297,24 @@ app.post("/api/generate", async (req, res) => {
     workflow["60"].inputs.filename_prefix = buildFilenamePrefix("qwen2512");
     input = { workflow };
   } else if (workflowType === "qwen2511") {
-    const imgs = (Array.isArray(req.body.images) ? req.body.images : []).slice(0, 3);
-    const image_filenames = imgs.map((img, i) => img.name || `input${i + 1}.png`);
-    workflow = buildWorkflowQwen2511({ prompt, negative_prompt, image_filenames, seed, loras });
+    const imgs = (Array.isArray(req.body.images) ? req.body.images : []).slice(
+      0,
+      3,
+    );
+    const image_filenames = imgs.map(
+      (img, i) => img.name || `input${i + 1}.png`,
+    );
+    workflow = buildWorkflowQwen2511({
+      prompt,
+      negative_prompt,
+      image_filenames,
+      seed,
+      loras,
+    });
     workflow["9"].inputs.filename_prefix = buildFilenamePrefix("qwen2511");
     input = {
       workflow,
-      images: imgs.map(img => ({ name: img.name, image: img.data })),
+      images: imgs.map((img) => ({ name: img.name, image: img.data })),
     };
   } else {
     // flux (default)
