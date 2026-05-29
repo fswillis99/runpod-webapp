@@ -215,6 +215,29 @@
         background: none;
       }
 
+      .swap-row {
+        display: flex;
+        justify-content: center;
+      }
+      .swap-btn {
+        background: none;
+        border: 1px solid #333;
+        border-radius: 4px;
+        color: #666;
+        font-size: 0.7rem;
+        padding: 0.15rem 0.6rem;
+        cursor: pointer;
+        width: auto;
+        transition:
+          color 0.15s,
+          border-color 0.15s;
+      }
+      .swap-btn:hover {
+        color: #aaa;
+        border-color: #555;
+        background: none;
+      }
+
       .url-input-row {
         display: flex;
         gap: 0.5rem;
@@ -1702,6 +1725,17 @@
               </div>
             </div>
 
+            <div class="swap-row">
+              <button
+                type="button"
+                class="swap-btn"
+                onclick="swapImageSlots(0, 1)"
+                title="Swap Image 1 ↔ Image 2"
+              >
+                ⇅ 1↔2
+              </button>
+            </div>
+
             <div class="image-slot">
               <div class="slot-header">
                 <span class="slot-label">Image 2</span>
@@ -1748,6 +1782,17 @@
                   Load
                 </button>
               </div>
+            </div>
+
+            <div class="swap-row">
+              <button
+                type="button"
+                class="swap-btn"
+                onclick="swapImageSlots(1, 2)"
+                title="Swap Image 2 ↔ Image 3"
+              >
+                ⇅ 2↔3
+              </button>
             </div>
 
             <div class="image-slot">
@@ -2255,17 +2300,38 @@ text, watermark, blurry, ugly, deformed</textarea
         if (file) handleImageFile(slotIdx, file, file.name);
       }
 
+      function renderSlotFromData(slotIdx) {
+        const img = uploadedImages[slotIdx];
+        const preview = document.getElementById(`imgPreview${slotIdx}`);
+        if (img) {
+          preview.src = `data:image/png;base64,${img.data}`;
+          preview.style.display = "block";
+          document.getElementById(`imgLabel${slotIdx}`).textContent = img.name;
+          document.getElementById(`imgClear${slotIdx}`).style.display = "";
+        } else {
+          preview.src = "";
+          preview.style.display = "none";
+          document.getElementById(`imgLabel${slotIdx}`).textContent =
+            slotIdx === 0
+              ? "Click \xB7 drag \xA0& drop \xB7 or paste"
+              : "Click \xB7 drag \xA0& drop";
+          document.getElementById(`imgClear${slotIdx}`).style.display = "none";
+          document.getElementById(`imgFile${slotIdx}`).value = "";
+        }
+      }
+
       function clearImageSlot(slotIdx) {
         uploadedImages[slotIdx] = null;
-        const preview = document.getElementById(`imgPreview${slotIdx}`);
-        preview.src = "";
-        preview.style.display = "none";
-        document.getElementById(`imgLabel${slotIdx}`).textContent =
-          slotIdx === 0
-            ? "Click \xB7 drag \xA0& drop \xB7 or paste"
-            : "Click \xB7 drag \xA0& drop";
-        document.getElementById(`imgClear${slotIdx}`).style.display = "none";
-        document.getElementById(`imgFile${slotIdx}`).value = "";
+        renderSlotFromData(slotIdx);
+      }
+
+      function swapImageSlots(a, b) {
+        [uploadedImages[a], uploadedImages[b]] = [
+          uploadedImages[b],
+          uploadedImages[a],
+        ];
+        renderSlotFromData(a);
+        renderSlotFromData(b);
       }
 
       async function loadSlotFromUrl(slotIdx) {
