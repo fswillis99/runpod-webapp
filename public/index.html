@@ -661,6 +661,28 @@
         letter-spacing: 0.06em;
         text-transform: uppercase;
       }
+      .batch-step-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+      }
+      .batch-step-move {
+        width: auto;
+        background: none;
+        border: none;
+        color: #555;
+        font-size: 0.7rem;
+        cursor: pointer;
+        padding: 0;
+        line-height: 1;
+      }
+      .batch-step-move:hover {
+        color: #aaa;
+      }
+      .batch-step-move:disabled {
+        opacity: 0.2;
+        cursor: default;
+      }
       .batch-step-remove {
         width: auto;
         background: none;
@@ -2747,9 +2769,28 @@ text, watermark, blurry, ugly, deformed</textarea>
 
       function removeBatchStep(id) {
         batchSteps = batchSteps.filter((s) => s.id !== id);
-        // Reset any chains that referenced the removed step
         batchSteps.forEach((s) => {
           if (s.chainFrom === id) s.chainFrom = "original";
+        });
+        renderBatchSteps();
+      }
+
+      function moveStep(id, direction) {
+        const idx = batchSteps.findIndex((s) => s.id === id);
+        const newIdx = idx + direction;
+        if (newIdx < 0 || newIdx >= batchSteps.length) return;
+        [batchSteps[idx], batchSteps[newIdx]] = [
+          batchSteps[newIdx],
+          batchSteps[idx],
+        ];
+        // Reset any chain that now points to a step at or after its own position
+        batchSteps.forEach((step, i) => {
+          if (step.chainFrom !== "original") {
+            const chainIdx = batchSteps.findIndex(
+              (s) => s.id === step.chainFrom,
+            );
+            if (chainIdx >= i) step.chainFrom = "original";
+          }
         });
         renderBatchSteps();
       }
@@ -2777,7 +2818,11 @@ text, watermark, blurry, ugly, deformed</textarea>
           <div class="batch-step">
             <div class="batch-step-header">
               <span class="batch-step-label">Step ${idx + 1}</span>
-              ${batchSteps.length > 1 ? `<button class="batch-step-remove" onclick="removeBatchStep('${step.id}')" title="Remove">×</button>` : ""}
+              <div class="batch-step-actions">
+                <button class="batch-step-move" onclick="moveStep('${step.id}',-1)" title="Move up" ${idx === 0 ? "disabled" : ""}>▲</button>
+                <button class="batch-step-move" onclick="moveStep('${step.id}',1)" title="Move down" ${idx === batchSteps.length - 1 ? "disabled" : ""}>▼</button>
+                ${batchSteps.length > 1 ? `<button class="batch-step-remove" onclick="removeBatchStep('${step.id}')" title="Remove">×</button>` : ""}
+              </div>
             </div>
             <textarea placeholder="Prompt for step ${idx + 1}…" oninput="updateBatchStepField('${step.id}','prompt',this.value)">${escapeHtml(step.prompt)}</textarea>
             <div class="batch-step-row">
