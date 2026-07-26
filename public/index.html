@@ -786,12 +786,23 @@
         border: none;
         color: #555;
         cursor: pointer;
-        font-size: 0.9rem;
-        padding: 0;
+        font-size: 0.75rem;
+        padding: 0.1rem 0.3rem;
         line-height: 1;
+        border-radius: 3px;
+        opacity: 0;
+        transition:
+          opacity 0.15s,
+          color 0.15s;
+        flex-shrink: 0;
+        white-space: nowrap;
+      }
+      .batch-load-item:hover .batch-load-item-del {
+        opacity: 1;
       }
       .batch-load-item-del:hover {
         color: #f87171;
+        background: rgba(248, 113, 113, 0.1);
       }
       .batch-load-empty {
         padding: 0.75rem;
