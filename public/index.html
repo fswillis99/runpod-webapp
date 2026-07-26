@@ -556,6 +556,337 @@
         color: #f59e0b;
       }
 
+      /* ── Batch mode ── */
+      .batch-btn {
+        flex: 0 0 auto;
+        width: auto;
+        padding: 0.6rem 0.9rem;
+        background: transparent;
+        border: 1px solid #444;
+        color: #555;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        cursor: pointer;
+        transition:
+          border-color 0.2s,
+          color 0.2s,
+          background 0.2s;
+        border-radius: 8px;
+      }
+      .batch-btn:hover:not(:disabled) {
+        border-color: #6366f1;
+        color: #6366f1;
+      }
+      .batch-btn.active {
+        background: rgba(99, 102, 241, 0.12);
+        border-color: #6366f1;
+        color: #6366f1;
+      }
+      .batch-section {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+      .batch-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+      }
+      .batch-header-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #555;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .batch-header-actions {
+        display: flex;
+        gap: 0.4rem;
+        align-items: center;
+      }
+      .batch-action-btn {
+        padding: 0.3rem 0.6rem;
+        background: transparent;
+        border: 1px solid #333;
+        color: #aaa;
+        font-size: 0.72rem;
+        cursor: pointer;
+        border-radius: 6px;
+        transition:
+          border-color 0.2s,
+          color 0.2s;
+      }
+      .batch-action-btn:hover {
+        border-color: #6366f1;
+        color: #6366f1;
+      }
+      .batch-steps-container {
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+      }
+      .batch-step {
+        background: #161616;
+        border: 1px solid #2a2a2a;
+        border-radius: 8px;
+        padding: 0.75rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+      .batch-step-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .batch-step-label {
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: #6366f1;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .batch-step-remove {
+        background: none;
+        border: none;
+        color: #555;
+        font-size: 1rem;
+        cursor: pointer;
+        padding: 0;
+        line-height: 1;
+      }
+      .batch-step-remove:hover {
+        color: #f87171;
+      }
+      .batch-step textarea {
+        width: 100%;
+        min-height: 54px;
+        resize: vertical;
+        background: #0f0f0f;
+        border: 1px solid #2a2a2a;
+        color: #e0e0e0;
+        font-size: 0.82rem;
+        padding: 0.45rem 0.5rem;
+        border-radius: 6px;
+        font-family: inherit;
+      }
+      .batch-step textarea:focus {
+        outline: none;
+        border-color: #6366f1;
+      }
+      .batch-step-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+      .batch-step-count-wrap {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.78rem;
+        color: #888;
+        flex-shrink: 0;
+      }
+      .batch-step-count-wrap input[type="number"] {
+        width: 52px;
+        background: #0f0f0f;
+        border: 1px solid #2a2a2a;
+        color: #e0e0e0;
+        font-size: 0.82rem;
+        padding: 0.2rem 0.4rem;
+        border-radius: 6px;
+      }
+      .batch-chain-wrap {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        font-size: 0.78rem;
+        color: #888;
+      }
+      .batch-chain-wrap label {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .batch-chain-wrap input[type="radio"] {
+        accent-color: #6366f1;
+      }
+      .batch-add-step {
+        background: transparent;
+        border: 1px dashed #2a2a2a;
+        color: #555;
+        font-size: 0.78rem;
+        cursor: pointer;
+        padding: 0.5rem;
+        border-radius: 8px;
+        text-align: center;
+        width: 100%;
+        transition:
+          border-color 0.2s,
+          color 0.2s;
+      }
+      .batch-add-step:hover {
+        border-color: #6366f1;
+        color: #6366f1;
+      }
+      .batch-save-row {
+        display: flex;
+        gap: 0.4rem;
+        align-items: center;
+      }
+      .batch-save-row input {
+        flex: 1;
+        background: #0f0f0f;
+        border: 1px solid #2a2a2a;
+        color: #e0e0e0;
+        font-size: 0.82rem;
+        padding: 0.3rem 0.5rem;
+        border-radius: 6px;
+      }
+      .batch-load-dropdown {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        background: #1e1e1e;
+        border: 1px solid #333;
+        border-radius: 8px;
+        z-index: 300;
+        min-width: 200px;
+        max-height: 240px;
+        overflow-y: auto;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        margin-top: 0.25rem;
+      }
+      .batch-load-item {
+        display: flex;
+        align-items: center;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.82rem;
+        cursor: pointer;
+        gap: 0.5rem;
+      }
+      .batch-load-item:hover {
+        background: #2a2a2a;
+      }
+      .batch-load-item-name {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: #e0e0e0;
+      }
+      .batch-load-item-del {
+        background: none;
+        border: none;
+        color: #555;
+        cursor: pointer;
+        font-size: 0.9rem;
+        padding: 0;
+        line-height: 1;
+      }
+      .batch-load-item-del:hover {
+        color: #f87171;
+      }
+      .batch-load-empty {
+        padding: 0.75rem;
+        color: #555;
+        font-size: 0.82rem;
+        text-align: center;
+      }
+      .batch-preview-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 500;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .batch-preview-box {
+        background: #1a1a1a;
+        border: 1px solid #333;
+        border-radius: 12px;
+        padding: 1.5rem;
+        max-width: 480px;
+        width: 90%;
+        max-height: 80vh;
+        overflow-y: auto;
+      }
+      .batch-preview-title {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: #6366f1;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin-bottom: 1rem;
+      }
+      .batch-preview-step {
+        padding: 0.6rem 0.75rem;
+        background: #0f0f0f;
+        border: 1px solid #2a2a2a;
+        border-radius: 6px;
+        font-size: 0.82rem;
+      }
+      .batch-preview-step-label {
+        font-weight: 700;
+        color: #6366f1;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        margin-bottom: 0.25rem;
+      }
+      .batch-preview-step-prompt {
+        color: #e0e0e0;
+        margin-bottom: 0.25rem;
+        word-break: break-word;
+      }
+      .batch-preview-step-meta {
+        color: #888;
+        font-size: 0.75rem;
+      }
+      .batch-preview-arrow {
+        text-align: center;
+        color: #6366f1;
+        font-size: 1rem;
+        margin: 0.2rem 0;
+      }
+      .batch-preview-total {
+        margin-top: 0.75rem;
+        font-size: 0.78rem;
+        color: #888;
+        text-align: right;
+      }
+      .batch-preview-close {
+        display: block;
+        width: 100%;
+        margin-top: 1rem;
+        padding: 0.5rem;
+        background: #2a2a2a;
+        border: none;
+        color: #aaa;
+        cursor: pointer;
+        border-radius: 6px;
+        font-size: 0.82rem;
+      }
+      .batch-preview-close:hover {
+        background: #333;
+        color: #e0e0e0;
+      }
+      .batch-progress-row {
+        padding: 0.45rem 0.6rem;
+        background: rgba(99, 102, 241, 0.08);
+        border: 1px solid rgba(99, 102, 241, 0.25);
+        border-radius: 6px;
+        font-size: 0.78rem;
+        color: #6366f1;
+        margin-bottom: 0.25rem;
+      }
+
       /* ── History section ── */
       .history-section {
         width: 100%;
@@ -1844,14 +2175,50 @@
             </div>
           </div>
         </div>
-        <div>
+        <div id="promptSection">
           <label for="prompt">Prompt</label>
           <textarea
             id="prompt"
             placeholder="a photo of an astronaut riding a horse on mars"
           >
-a photo of an astronaut riding a horse on mars</textarea
-          >
+a photo of an astronaut riding a horse on mars</textarea>
+        </div>
+        <!-- Batch editor: visible only in batch mode (qwen2511 only) -->
+        <div id="batchSection" class="batch-section" style="display: none">
+          <div class="batch-header">
+            <span class="batch-header-label">Batch Steps</span>
+            <div class="batch-header-actions">
+              <button
+                class="batch-action-btn"
+                onclick="showBatchPreview()"
+                title="Preview batch plan"
+              >
+                Preview
+              </button>
+              <div style="position: relative">
+                <button
+                  class="batch-action-btn"
+                  id="batchLoadBtn"
+                  onclick="toggleBatchLoadDropdown(event)"
+                >
+                  Load ▾
+                </button>
+                <div
+                  id="batchLoadDropdown"
+                  class="batch-load-dropdown"
+                  style="display: none"
+                ></div>
+              </div>
+            </div>
+          </div>
+          <div id="batchStepsContainer" class="batch-steps-container"></div>
+          <button class="batch-add-step" onclick="addBatchStep()">
+            + Add Step
+          </button>
+          <div class="batch-save-row">
+            <input type="text" id="batchSaveName" placeholder="Batch name…" />
+            <button class="batch-action-btn" onclick="saveBatch()">Save</button>
+          </div>
         </div>
         <div id="lorasSection" style="display: none">
           <label>LoRAs</label>
@@ -1889,8 +2256,7 @@ a photo of an astronaut riding a horse on mars</textarea
         <div id="negativeSection">
           <label for="negative">Negative Prompt</label>
           <textarea id="negative" style="min-height: 70px">
-text, watermark, blurry, ugly, deformed</textarea
-          >
+text, watermark, blurry, ugly, deformed</textarea>
         </div>
         <div class="row" id="dimensionsSection">
           <div>
@@ -1935,6 +2301,15 @@ text, watermark, blurry, ugly, deformed</textarea
         </div>
         <div class="generate-row">
           <button id="generateBtn" onclick="generate()">Generate</button>
+          <button
+            id="batchBtn"
+            class="batch-btn"
+            onclick="toggleBatchMode()"
+            title="Batch mode: multiple prompts on one image (qwen2511 only)"
+            style="display: none"
+          >
+            Batch
+          </button>
           <button
             id="turboBtn"
             class="turbo-btn"
@@ -2067,6 +2442,22 @@ text, watermark, blurry, ugly, deformed</textarea
       style="display: none"
       onchange="handleLibUpload(this)"
     />
+
+    <!-- Batch preview overlay -->
+    <div
+      id="batchPreviewOverlay"
+      class="batch-preview-overlay"
+      style="display: none"
+      onclick="closeBatchPreview()"
+    >
+      <div class="batch-preview-box" onclick="event.stopPropagation()">
+        <div class="batch-preview-title">Batch Preview</div>
+        <div id="batchPreviewContent"></div>
+        <button class="batch-preview-close" onclick="closeBatchPreview()">
+          Close
+        </button>
+      </div>
+    </div>
 
     <div id="confirmOverlay" class="confirm-overlay" style="display: none">
       <div class="confirm-box">
@@ -2207,6 +2598,15 @@ text, watermark, blurry, ugly, deformed</textarea
       let jobQueue = [];
       let currentBlobUrl = null;
 
+      // Batch state
+      let batchMode = false;
+      let batchSteps = []; // [{id, prompt, count, chainFrom}]
+      let batchStepOutputs = {}; // stepId → filename of first completed output
+      let batchPendingJobs = {}; // stepId → [stepParams] waiting for that output
+      let batchTotalJobs = 0;
+      let batchCompletedJobs = 0;
+      let savedBatches = [];
+
       function maxConcurrent() {
         return turboMode ? 2 : 1;
       }
@@ -2236,6 +2636,7 @@ text, watermark, blurry, ugly, deformed</textarea
       function onWorkflowChange() {
         const wf = document.getElementById("workflowType").value;
         const isQwen = wf === "qwen2512" || wf === "qwen2511";
+        const isBatchable = wf === "qwen2511";
         document.getElementById("imageUploadSection").style.display =
           wf === "qwen2511" ? "" : "none";
         document.getElementById("lorasSection").style.display = isQwen
@@ -2246,6 +2647,17 @@ text, watermark, blurry, ugly, deformed</textarea
           wf === "flux" || wf === "qwen2512" ? "" : "none";
         document.getElementById("samplerSection").style.display =
           wf === "flux" ? "" : "none";
+        // Show/hide batch button; exit batch mode if switching away from qwen2511
+        document.getElementById("batchBtn").style.display = isBatchable
+          ? ""
+          : "none";
+        if (!isBatchable && batchMode) {
+          batchMode = false;
+          document.getElementById("batchBtn").classList.remove("active");
+          document.getElementById("batchSection").style.display = "none";
+          document.getElementById("promptSection").style.display = "";
+          document.getElementById("generateBtn").textContent = "Generate";
+        }
         if (wf === "qwen2512") {
           document.getElementById("width").value = 1328;
           document.getElementById("height").value = 1328;
@@ -2271,6 +2683,307 @@ text, watermark, blurry, ugly, deformed</textarea
           .getElementById("turboBtn")
           .classList.toggle("active", turboMode);
       }
+
+      // ── Batch mode ──────────────────────────────────────────────────────────
+
+      function toggleBatchMode() {
+        const wf = document.getElementById("workflowType").value;
+        if (wf !== "qwen2511") return;
+        batchMode = !batchMode;
+        document
+          .getElementById("batchBtn")
+          .classList.toggle("active", batchMode);
+        document.getElementById("batchSection").style.display = batchMode
+          ? ""
+          : "none";
+        document.getElementById("promptSection").style.display = batchMode
+          ? "none"
+          : "";
+        document.getElementById("generateBtn").textContent = batchMode
+          ? "Submit Batch"
+          : "Generate";
+        if (batchMode && batchSteps.length === 0) addBatchStep();
+        if (batchMode) loadSavedBatches();
+        renderBatchSteps();
+      }
+
+      function addBatchStep() {
+        const id = String(Date.now()) + Math.random().toString(36).slice(2, 5);
+        batchSteps.push({ id, prompt: "", count: 1, chainFrom: "original" });
+        renderBatchSteps();
+      }
+
+      function removeBatchStep(id) {
+        batchSteps = batchSteps.filter((s) => s.id !== id);
+        // Reset any chains that referenced the removed step
+        batchSteps.forEach((s) => {
+          if (s.chainFrom === id) s.chainFrom = "original";
+        });
+        renderBatchSteps();
+      }
+
+      function updateBatchStepField(id, field, value) {
+        const step = batchSteps.find((s) => s.id === id);
+        if (step) step[field] = value;
+      }
+
+      function renderBatchSteps() {
+        const container = document.getElementById("batchStepsContainer");
+        if (!container) return;
+        container.innerHTML = batchSteps
+          .map((step, idx) => {
+            const chainOptions = [
+              `<label><input type="radio" name="chain_${step.id}" value="original" ${step.chainFrom === "original" ? "checked" : ""} onchange="updateBatchStepField('${step.id}','chainFrom','original')"> Original</label>`,
+            ];
+            for (let i = 0; i < idx; i++) {
+              const prev = batchSteps[i];
+              chainOptions.push(
+                `<label><input type="radio" name="chain_${step.id}" value="${prev.id}" ${step.chainFrom === prev.id ? "checked" : ""} onchange="updateBatchStepField('${step.id}','chainFrom','${prev.id}')"> Step ${i + 1}</label>`,
+              );
+            }
+            return `
+          <div class="batch-step">
+            <div class="batch-step-header">
+              <span class="batch-step-label">Step ${idx + 1}</span>
+              ${batchSteps.length > 1 ? `<button class="batch-step-remove" onclick="removeBatchStep('${step.id}')" title="Remove">×</button>` : ""}
+            </div>
+            <textarea placeholder="Prompt for step ${idx + 1}…" oninput="updateBatchStepField('${step.id}','prompt',this.value)">${escapeHtml(step.prompt)}</textarea>
+            <div class="batch-step-row">
+              <div class="batch-step-count-wrap">
+                <span>Images:</span>
+                <input type="number" value="${step.count}" min="1" max="10"
+                  onchange="updateBatchStepField('${step.id}','count',Math.max(1,Math.min(10,parseInt(this.value)||1)))">
+              </div>
+              ${idx > 0 ? `<div class="batch-chain-wrap"><span>Input:</span>${chainOptions.join("")}</div>` : '<div class="batch-chain-wrap" style="color:#555;font-size:0.75rem;">Input: original images</div>'}
+            </div>
+          </div>`;
+          })
+          .join("");
+      }
+
+      function showBatchPreview() {
+        if (batchSteps.length === 0) return;
+        let totalJobs = 0;
+        const items = batchSteps
+          .map((step, idx) => {
+            const count = step.count || 1;
+            totalJobs += count;
+            const chainIdx = batchSteps.findIndex(
+              (s) => s.id === step.chainFrom,
+            );
+            const chainLabel =
+              step.chainFrom === "original" || chainIdx < 0
+                ? "original images"
+                : `Step ${chainIdx + 1} output`;
+            return `
+          <div class="batch-preview-step">
+            <div class="batch-preview-step-label">Step ${idx + 1}</div>
+            <div class="batch-preview-step-prompt">${escapeHtml(step.prompt || "(no prompt)")}</div>
+            <div class="batch-preview-step-meta">${count} image${count !== 1 ? "s" : ""} · from ${chainLabel}</div>
+          </div>
+          ${idx < batchSteps.length - 1 ? '<div class="batch-preview-arrow">↓</div>' : ""}`;
+          })
+          .join("");
+        document.getElementById("batchPreviewContent").innerHTML =
+          items +
+          `<div class="batch-preview-total">Total: ${totalJobs} job${totalJobs !== 1 ? "s" : ""}</div>`;
+        document.getElementById("batchPreviewOverlay").style.display = "flex";
+      }
+
+      function closeBatchPreview() {
+        document.getElementById("batchPreviewOverlay").style.display = "none";
+      }
+
+      async function loadSavedBatches() {
+        try {
+          const res = await fetch("/api/batches");
+          savedBatches = await res.json();
+        } catch (err) {
+          console.warn("Failed to load batches:", err);
+        }
+      }
+
+      function toggleBatchLoadDropdown(event) {
+        event.stopPropagation();
+        const dropdown = document.getElementById("batchLoadDropdown");
+        if (dropdown.style.display === "none") {
+          renderBatchLoadDropdown();
+          dropdown.style.display = "block";
+          const close = () => {
+            dropdown.style.display = "none";
+            document.removeEventListener("click", close);
+          };
+          setTimeout(() => document.addEventListener("click", close), 0);
+        } else {
+          dropdown.style.display = "none";
+        }
+      }
+
+      function renderBatchLoadDropdown() {
+        const dropdown = document.getElementById("batchLoadDropdown");
+        dropdown.innerHTML =
+          savedBatches.length === 0
+            ? '<div class="batch-load-empty">No saved batches</div>'
+            : savedBatches
+                .map(
+                  (b) => `
+          <div class="batch-load-item" onclick="loadBatchFromSaved(${b.id})">
+            <span class="batch-load-item-name">${escapeHtml(b.name)}</span>
+            <button class="batch-load-item-del" onclick="event.stopPropagation();deleteSavedBatch(${b.id})" title="Delete">×</button>
+          </div>`,
+                )
+                .join("");
+      }
+
+      function loadBatchFromSaved(id) {
+        const batch = savedBatches.find((b) => b.id === id);
+        if (!batch) return;
+        batchSteps = batch.steps.map((s) => ({ ...s }));
+        document.getElementById("batchSaveName").value = batch.name;
+        document.getElementById("batchLoadDropdown").style.display = "none";
+        renderBatchSteps();
+        setStatus(`Loaded batch: ${batch.name}`, "success");
+      }
+
+      async function deleteSavedBatch(id) {
+        try {
+          await fetch(`/api/batches/${id}`, { method: "DELETE" });
+          await loadSavedBatches();
+          renderBatchLoadDropdown();
+          setStatus("Batch deleted.", "success");
+        } catch (err) {
+          console.warn("Delete batch failed:", err);
+        }
+      }
+
+      async function saveBatch() {
+        const name = document.getElementById("batchSaveName").value.trim();
+        if (!name) {
+          setStatus("Enter a name to save the batch.", "error");
+          return;
+        }
+        if (batchSteps.length === 0) {
+          setStatus("No steps to save.", "error");
+          return;
+        }
+        try {
+          const body = { name, steps: batchSteps };
+          const existing = savedBatches.find((b) => b.name === name);
+          if (existing) body.id = existing.id;
+          const res = await fetch("/api/batches", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          const data = await res.json();
+          if (data.error) throw new Error(data.error);
+          await loadSavedBatches();
+          setStatus("Batch saved.", "success");
+        } catch (err) {
+          setStatus("Save failed: " + err.message, "error");
+        }
+      }
+
+      async function submitBatch() {
+        if (batchSteps.length === 0) {
+          setStatus("Add at least one step.", "error");
+          return;
+        }
+        for (let i = 0; i < batchSteps.length; i++) {
+          if (!batchSteps[i].prompt.trim()) {
+            setStatus(`Step ${i + 1} has no prompt.`, "error");
+            return;
+          }
+        }
+        if (!uploadedImages[0]) {
+          setStatus(
+            "Please upload at least one input image for image edit.",
+            "error",
+          );
+          return;
+        }
+
+        // Auto-enable turbo for batch
+        if (!turboMode) toggleTurbo();
+
+        // Reset batch tracking
+        batchStepOutputs = {};
+        batchPendingJobs = {};
+        batchTotalJobs = batchSteps.reduce((sum, s) => sum + (s.count || 1), 0);
+        batchCompletedJobs = 0;
+
+        const baseImages = uploadedImages
+          .filter(Boolean)
+          .map((img, i) => ({ name: `input${i + 1}.png`, data: img.data }));
+        const negative_prompt = document.getElementById("negative").value;
+        const loras = getActiveLoras();
+
+        for (const step of batchSteps) {
+          const stepParams = {
+            workflowType: "qwen2511",
+            prompt: step.prompt.trim(),
+            negative_prompt,
+            loras,
+            images: baseImages,
+            batchStepId: step.id,
+            batchCount: step.count || 1,
+          };
+          if (step.chainFrom === "original") {
+            for (let c = 0; c < stepParams.batchCount; c++) {
+              jobQueue.push({ ...stepParams });
+            }
+          } else {
+            if (!batchPendingJobs[step.chainFrom])
+              batchPendingJobs[step.chainFrom] = [];
+            batchPendingJobs[step.chainFrom].push(stepParams);
+          }
+        }
+
+        if (!isProcessing) {
+          isProcessing = true;
+          setSpinner(true);
+          if (document.getElementById("resultImg").style.display === "none") {
+            document.getElementById("placeholder").style.display = "";
+          }
+          document.getElementById("downloadBtn").style.visibility = "hidden";
+        }
+        updateQueueDisplay();
+        maybeFillSlots();
+        setStatus(
+          `Batch started: ${batchTotalJobs} job${batchTotalJobs !== 1 ? "s" : ""} queued`,
+        );
+      }
+
+      async function handleBatchChain(params, filename) {
+        if (!params.batchStepId) return;
+        batchCompletedJobs++;
+        if (batchStepOutputs[params.batchStepId]) return; // already handled
+        batchStepOutputs[params.batchStepId] = filename;
+        const pending = batchPendingJobs[params.batchStepId] || [];
+        if (pending.length === 0) return;
+        delete batchPendingJobs[params.batchStepId];
+        try {
+          const res = await fetch(
+            `/api/image-b64/${encodeURIComponent(filename)}`,
+          );
+          const { data } = await res.json();
+          for (const pendingParams of pending) {
+            const chainedParams = {
+              ...pendingParams,
+              images: [{ name: "input1.png", data }],
+            };
+            for (let c = 0; c < (pendingParams.batchCount || 1); c++) {
+              jobQueue.push({ ...chainedParams });
+            }
+          }
+        } catch (err) {
+          console.warn("Failed to fetch chained image:", err);
+        }
+        maybeFillSlots();
+        updateQueueDisplay();
+      }
+
+      // ────────────────────────────────────────────────────────────────────────
 
       function getActiveLoras() {
         return Array.from(document.querySelectorAll(".lora-toggle.active")).map(
@@ -2384,10 +3097,32 @@ text, watermark, blurry, ugly, deformed</textarea
         const activeJobs = activeJobParams.filter(Boolean);
         const hasActive = activeJobs.length > 0;
         const hasQueued = jobQueue.length > 0;
+        const hasBatchProgress = batchMode && batchTotalJobs > 0;
 
-        if (!hasActive && !hasQueued) {
+        if (!hasActive && !hasQueued && !hasBatchProgress) {
           panel.style.display = "none";
           return;
+        }
+
+        // Batch progress banner
+        const batchProgressEl = panel.querySelector(".batch-progress-row");
+        if (hasBatchProgress) {
+          const pendingCount = Object.values(batchPendingJobs).reduce(
+            (sum, arr) => sum + arr.length,
+            0,
+          );
+          const pendingNote =
+            pendingCount > 0
+              ? ` · ${pendingCount} step${pendingCount !== 1 ? "s" : ""} waiting on chain`
+              : "";
+          const html = `<div class="batch-progress-row">Batch: ${batchCompletedJobs} / ${batchTotalJobs} jobs complete${pendingNote}</div>`;
+          if (batchProgressEl) {
+            batchProgressEl.outerHTML = html;
+          } else {
+            panel.insertAdjacentHTML("afterbegin", html);
+          }
+        } else if (batchProgressEl) {
+          batchProgressEl.remove();
         }
 
         const queueSection = document.getElementById("queueSection");
@@ -3574,6 +4309,10 @@ text, watermark, blurry, ugly, deformed</textarea
       }
 
       function generate() {
+        if (batchMode) {
+          submitBatch();
+          return;
+        }
         const prompt = document.getElementById("prompt").value.trim();
         if (!prompt) {
           setStatus("Please enter a prompt.", "error");
@@ -3690,6 +4429,7 @@ text, watermark, blurry, ugly, deformed</textarea
                   .catch((err) => console.warn("Exec time save failed:", err));
               }
               refreshCredits();
+              await handleBatchChain(params, imageEntry.filename);
               finishJob(slotIdx);
             } else if (status === "FAILED") {
               throw new Error(
@@ -4065,11 +4805,12 @@ text, watermark, blurry, ugly, deformed</textarea
         setInterval(checkPing, 30_000);
       })();
 
-      // Load history, libraries, and credits on page init
+      // Load history, libraries, credits, and saved batches on page init
       refreshHistory();
       refreshLibraries();
       refreshTrash();
       refreshCredits();
+      loadSavedBatches();
 
       // Show local timezone in the execution time stats header
       document.getElementById("statsTzHint").textContent =
