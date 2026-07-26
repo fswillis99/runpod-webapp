@@ -3170,7 +3170,7 @@ text, watermark, blurry, ugly, deformed</textarea>
             parts.push(`<span>${runningCount}</span> running`);
           if (queuedCount > 0) parts.push(`<span>${queuedCount}</span> queued`);
           pendingEl.innerHTML = parts.join(" · ");
-          pendingEl.style.display = "";
+          pendingEl.style.display = "block";
         } else {
           pendingEl.style.display = "none";
         }
