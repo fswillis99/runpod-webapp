@@ -4,6 +4,7 @@ history.json
 libraries.json
 trash.json
 execution_times.json
+batches.json
 .claude/worktrees
 images
 .DS_Store
