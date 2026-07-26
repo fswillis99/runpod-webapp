@@ -528,7 +528,8 @@
         background: #6366f1;
         animation: pulse-dot 1.4s ease-in-out infinite;
       }
-      #activeSection.has-divider {
+      #activeSection.has-divider,
+      #pendingSection.has-divider {
         border-top: 1px solid #222;
       }
 
@@ -2354,6 +2355,10 @@ text, watermark, blurry, ugly, deformed</textarea>
             <div class="queue-header">Running</div>
             <div id="activeList"></div>
           </div>
+          <div id="pendingSection" style="display: none">
+            <div class="queue-header">Pending Submissions</div>
+            <div id="pendingList"></div>
+          </div>
         </div>
         <a id="downloadBtn" class="btn-download">Download</a>
         <div class="status-bar" id="status">Ready</div>
@@ -2621,7 +2626,8 @@ text, watermark, blurry, ugly, deformed</textarea>
       const activeJobParams = [null, null]; // params for each running slot
       const activeJobStatus = [null, null]; // RunPod status per slot: IN_QUEUE | IN_PROGRESS | null
       let turboMode = false;
-      let jobQueue = [];
+      let jobQueue = []; // within-unit job queue (parallelised by slot logic)
+      let pendingBatches = []; // units waiting to start: [{type:'job'|'batch', ...}]
       let currentBlobUrl = null;
 
       // Batch state
@@ -2787,13 +2793,79 @@ text, watermark, blurry, ugly, deformed</textarea>
           .join("");
       }
 
-      function computeStepTotal(stepIdx) {
-        const step = batchSteps[stepIdx];
+      function computeStepTotalFromList(steps, stepIdx) {
+        const step = steps[stepIdx];
         const count = step.count || 1;
         if (step.chainFrom === "original") return count;
-        const parentIdx = batchSteps.findIndex((s) => s.id === step.chainFrom);
+        const parentIdx = steps.findIndex((s) => s.id === step.chainFrom);
         if (parentIdx < 0) return count;
-        return computeStepTotal(parentIdx) * count;
+        return computeStepTotalFromList(steps, parentIdx) * count;
+      }
+
+      function computeStepTotal(stepIdx) {
+        return computeStepTotalFromList(batchSteps, stepIdx);
+      }
+
+      function isBatchDone() {
+        return (
+          slotActive.every((v) => !v) &&
+          jobQueue.length === 0 &&
+          Object.keys(batchPendingJobs).length === 0
+        );
+      }
+
+      function startNextPendingBatch() {
+        if (pendingBatches.length === 0) return;
+        const next = pendingBatches.shift();
+
+        if (next.type === "job") {
+          const { params } = next;
+          isProcessing = true;
+          slotActive[0] = true;
+          activeJobParams[0] = params;
+          setSpinner(true);
+          document.getElementById("downloadBtn").style.visibility = "hidden";
+          runJob(params, 0);
+        } else {
+          // type === 'batch'
+          batchPendingJobs = {};
+          batchStepJobCounts = {};
+          batchCompletedJobs = 0;
+          batchTotalJobs = next.steps.reduce(
+            (sum, _, idx) => sum + computeStepTotalFromList(next.steps, idx),
+            0,
+          );
+          for (const step of next.steps) {
+            const count = step.count || 1;
+            const stepParams = {
+              workflowType: "qwen2511",
+              prompt: step.prompt.trim(),
+              negative_prompt: next.negative_prompt,
+              loras: next.loras,
+              images: next.baseImages,
+              batchStepId: step.id,
+              batchCount: count,
+            };
+            if (step.chainFrom === "original") {
+              batchStepJobCounts[step.id] = { total: count, completed: 0 };
+              for (let c = 0; c < count; c++) jobQueue.push({ ...stepParams });
+            } else {
+              batchStepJobCounts[step.id] = { total: 0, completed: 0 };
+              if (!batchPendingJobs[step.chainFrom])
+                batchPendingJobs[step.chainFrom] = [];
+              batchPendingJobs[step.chainFrom].push(stepParams);
+            }
+          }
+          isProcessing = true;
+          setSpinner(true);
+          document.getElementById("downloadBtn").style.visibility = "hidden";
+          maybeFillSlots();
+          setStatus(
+            `Starting queued batch: ${batchTotalJobs} job${batchTotalJobs !== 1 ? "s" : ""}`,
+          );
+        }
+
+        updateQueueDisplay();
       }
 
       function showBatchPreview() {
@@ -2946,21 +3018,38 @@ text, watermark, blurry, ugly, deformed</textarea>
         // Auto-enable turbo for batch
         if (!turboMode) toggleTurbo();
 
-        // Reset batch tracking; compute expected total upfront so the
-        // progress bar denominator is stable from the moment we start.
-        batchPendingJobs = {};
-        batchStepJobCounts = {};
-        batchTotalJobs = batchSteps.reduce(
-          (sum, _, idx) => sum + computeStepTotal(idx),
-          0,
-        );
-        batchCompletedJobs = 0;
-
         const baseImages = uploadedImages
           .filter(Boolean)
           .map((img, i) => ({ name: `input${i + 1}.png`, data: img.data }));
         const negative_prompt = document.getElementById("negative").value;
         const loras = getActiveLoras();
+
+        // If something is already running, park the whole batch as a unit
+        if (isProcessing) {
+          pendingBatches.push({
+            type: "batch",
+            steps: batchSteps.map((s) => ({ ...s })),
+            baseImages,
+            negative_prompt,
+            loras,
+          });
+          updateQueueDisplay();
+          setStatus(
+            `Batch queued (position ${pendingBatches.length})`,
+            "success",
+          );
+          return;
+        }
+
+        // Reset batch tracking; compute expected total upfront so the
+        // progress bar denominator is stable from the moment we start.
+        batchPendingJobs = {};
+        batchStepJobCounts = {};
+        batchTotalJobs = batchSteps.reduce(
+          (sum, _, idx) => sum + computeStepTotalFromList(batchSteps, idx),
+          0,
+        );
+        batchCompletedJobs = 0;
 
         for (const step of batchSteps) {
           const count = step.count || 1;
@@ -3158,24 +3247,34 @@ text, watermark, blurry, ugly, deformed</textarea>
         const activeJobs = activeJobParams.filter(Boolean);
         const hasActive = activeJobs.length > 0;
         const hasQueued = jobQueue.length > 0;
-        const hasBatchProgress = batchMode && batchTotalJobs > 0;
+        const hasBatchProgress = batchTotalJobs > 0;
+        const hasPendingBatches = pendingBatches.length > 0;
 
         // Update banner pending-jobs indicator
         const pendingEl = document.getElementById("pendingJobsDisplay");
         const runningCount = activeJobs.length;
         const queuedCount = jobQueue.length;
-        if (runningCount > 0 || queuedCount > 0) {
+        if (runningCount > 0 || queuedCount > 0 || hasPendingBatches) {
           const parts = [];
           if (runningCount > 0)
             parts.push(`<span>${runningCount}</span> running`);
           if (queuedCount > 0) parts.push(`<span>${queuedCount}</span> queued`);
+          if (hasPendingBatches)
+            parts.push(
+              `<span>${pendingBatches.length}</span> ${pendingBatches.length === 1 ? "submission" : "submissions"} pending`,
+            );
           pendingEl.innerHTML = parts.join(" · ");
           pendingEl.style.display = "block";
         } else {
           pendingEl.style.display = "none";
         }
 
-        if (!hasActive && !hasQueued && !hasBatchProgress) {
+        if (
+          !hasActive &&
+          !hasQueued &&
+          !hasBatchProgress &&
+          !hasPendingBatches
+        ) {
           panel.style.display = "none";
           return;
         }
@@ -3250,7 +3349,34 @@ text, watermark, blurry, ugly, deformed</textarea>
           activeSection.style.display = "none";
         }
 
+        const pendingSection = document.getElementById("pendingSection");
+        if (hasPendingBatches) {
+          document.getElementById("pendingList").innerHTML = pendingBatches
+            .map(
+              (unit, i) =>
+                `<div class="queue-item">
+                  <span class="queue-pos">${i + 1}</span>
+                  <span class="queue-wf">${unit.type === "batch" ? "Batch" : escapeHtml(WF_LABELS[unit.params?.workflowType] || "")}</span>
+                  <span class="queue-prompt">${unit.type === "batch" ? `${unit.steps.length} step${unit.steps.length !== 1 ? "s" : ""}` : escapeHtml(unit.params?.prompt || "")}</span>
+                  <button class="queue-remove" onclick="removePendingBatch(${i})" title="Remove">×</button>
+                </div>`,
+            )
+            .join("");
+          pendingSection.classList.toggle(
+            "has-divider",
+            hasActive || hasQueued,
+          );
+          pendingSection.style.display = "";
+        } else {
+          pendingSection.style.display = "none";
+        }
+
         panel.style.display = "block";
+      }
+
+      function removePendingBatch(index) {
+        pendingBatches.splice(index, 1);
+        updateQueueDisplay();
       }
 
       function removeFromQueue(index) {
@@ -4406,11 +4532,12 @@ text, watermark, blurry, ugly, deformed</textarea>
         const params = buildJobParams();
 
         if (isProcessing) {
-          jobQueue.push(params);
+          pendingBatches.push({ type: "job", params });
           updateQueueDisplay();
-          setStatus(`Added to queue (position ${jobQueue.length})`, "success");
-          // In turbo mode, immediately fill a free slot if one is available.
-          maybeFillSlots();
+          setStatus(
+            `Job queued (position ${pendingBatches.length})`,
+            "success",
+          );
           return;
         }
 
@@ -4527,10 +4654,15 @@ text, watermark, blurry, ugly, deformed</textarea>
         slotActive[slotIdx] = false;
         activeJobParams[slotIdx] = null;
         activeJobStatus[slotIdx] = null;
-        maybeFillSlots(); // fill freed slot from queue if any
-        if (slotActive.every((v) => !v)) {
+        maybeFillSlots(); // fill freed slot from within-unit queue if any
+        if (isBatchDone()) {
           setSpinner(false);
           isProcessing = false;
+          batchTotalJobs = 0;
+          batchCompletedJobs = 0;
+          if (pendingBatches.length > 0) {
+            startNextPendingBatch();
+          }
         }
         updateQueueDisplay();
       }
