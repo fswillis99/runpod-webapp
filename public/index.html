@@ -63,6 +63,17 @@
         font-weight: 600;
       }
 
+      .pending-jobs {
+        font-size: 0.8rem;
+        color: #888;
+        display: none;
+      }
+
+      .pending-jobs span {
+        color: #6366f1;
+        font-weight: 600;
+      }
+
       .site-nav {
         display: flex;
         gap: 0.25rem;
@@ -1998,6 +2009,7 @@
       <div class="titlebar-top">
         <h1>RunPod Image Generator</h1>
         <div class="credits" id="creditsDisplay">Credits: …</div>
+        <div class="pending-jobs" id="pendingJobsDisplay"></div>
       </div>
       <nav class="site-nav">
         <a href="#section-workspace">Workspace</a>
@@ -3147,6 +3159,21 @@ text, watermark, blurry, ugly, deformed</textarea>
         const hasActive = activeJobs.length > 0;
         const hasQueued = jobQueue.length > 0;
         const hasBatchProgress = batchMode && batchTotalJobs > 0;
+
+        // Update banner pending-jobs indicator
+        const pendingEl = document.getElementById("pendingJobsDisplay");
+        const runningCount = activeJobs.length;
+        const queuedCount = jobQueue.length;
+        if (runningCount > 0 || queuedCount > 0) {
+          const parts = [];
+          if (runningCount > 0)
+            parts.push(`<span>${runningCount}</span> running`);
+          if (queuedCount > 0) parts.push(`<span>${queuedCount}</span> queued`);
+          pendingEl.innerHTML = parts.join(" · ");
+          pendingEl.style.display = "";
+        } else {
+          pendingEl.style.display = "none";
+        }
 
         if (!hasActive && !hasQueued && !hasBatchProgress) {
           panel.style.display = "none";
