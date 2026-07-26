@@ -2615,8 +2615,8 @@ text, watermark, blurry, ugly, deformed</textarea>
       // Batch state
       let batchMode = false;
       let batchSteps = []; // [{id, prompt, count, chainFrom}]
-      let batchStepOutputs = {}; // stepId → filename of first completed output
-      let batchPendingJobs = {}; // stepId → [stepParams] waiting for that output
+      let batchPendingJobs = {}; // stepId → [stepParams] waiting for that step's outputs
+      let batchStepJobCounts = {}; // stepId → {total, completed} for tracking step completion
       let batchTotalJobs = 0;
       let batchCompletedJobs = 0;
       let savedBatches = [];
@@ -2775,13 +2775,23 @@ text, watermark, blurry, ugly, deformed</textarea>
           .join("");
       }
 
+      function computeStepTotal(stepIdx) {
+        const step = batchSteps[stepIdx];
+        const count = step.count || 1;
+        if (step.chainFrom === "original") return count;
+        const parentIdx = batchSteps.findIndex((s) => s.id === step.chainFrom);
+        if (parentIdx < 0) return count;
+        return computeStepTotal(parentIdx) * count;
+      }
+
       function showBatchPreview() {
         if (batchSteps.length === 0) return;
         let totalJobs = 0;
         const items = batchSteps
           .map((step, idx) => {
             const count = step.count || 1;
-            totalJobs += count;
+            const stepTotal = computeStepTotal(idx);
+            totalJobs += stepTotal;
             const chainIdx = batchSteps.findIndex(
               (s) => s.id === step.chainFrom,
             );
@@ -2789,11 +2799,15 @@ text, watermark, blurry, ugly, deformed</textarea>
               step.chainFrom === "original" || chainIdx < 0
                 ? "original images"
                 : `Step ${chainIdx + 1} output`;
+            const perParentNote =
+              step.chainFrom !== "original" && chainIdx >= 0
+                ? ` (${count} × ${computeStepTotal(chainIdx)} parent = ${stepTotal})`
+                : "";
             return `
           <div class="batch-preview-step">
             <div class="batch-preview-step-label">Step ${idx + 1}</div>
             <div class="batch-preview-step-prompt">${escapeHtml(step.prompt || "(no prompt)")}</div>
-            <div class="batch-preview-step-meta">${count} image${count !== 1 ? "s" : ""} · from ${chainLabel}</div>
+            <div class="batch-preview-step-meta">${stepTotal} image${stepTotal !== 1 ? "s" : ""}${perParentNote} · from ${chainLabel}</div>
           </div>
           ${idx < batchSteps.length - 1 ? '<div class="batch-preview-arrow">↓</div>' : ""}`;
           })
@@ -2921,9 +2935,9 @@ text, watermark, blurry, ugly, deformed</textarea>
         if (!turboMode) toggleTurbo();
 
         // Reset batch tracking
-        batchStepOutputs = {};
         batchPendingJobs = {};
-        batchTotalJobs = batchSteps.reduce((sum, s) => sum + (s.count || 1), 0);
+        batchStepJobCounts = {};
+        batchTotalJobs = 0;
         batchCompletedJobs = 0;
 
         const baseImages = uploadedImages
@@ -2933,6 +2947,7 @@ text, watermark, blurry, ugly, deformed</textarea>
         const loras = getActiveLoras();
 
         for (const step of batchSteps) {
+          const count = step.count || 1;
           const stepParams = {
             workflowType: "qwen2511",
             prompt: step.prompt.trim(),
@@ -2940,13 +2955,17 @@ text, watermark, blurry, ugly, deformed</textarea>
             loras,
             images: baseImages,
             batchStepId: step.id,
-            batchCount: step.count || 1,
+            batchCount: count,
           };
           if (step.chainFrom === "original") {
-            for (let c = 0; c < stepParams.batchCount; c++) {
+            batchTotalJobs += count;
+            batchStepJobCounts[step.id] = { total: count, completed: 0 };
+            for (let c = 0; c < count; c++) {
               jobQueue.push({ ...stepParams });
             }
           } else {
+            // Count unknown until parent outputs arrive; initialise to 0
+            batchStepJobCounts[step.id] = { total: 0, completed: 0 };
             if (!batchPendingJobs[step.chainFrom])
               batchPendingJobs[step.chainFrom] = [];
             batchPendingJobs[step.chainFrom].push(stepParams);
@@ -2971,29 +2990,43 @@ text, watermark, blurry, ugly, deformed</textarea>
       async function handleBatchChain(params, filename) {
         if (!params.batchStepId) return;
         batchCompletedJobs++;
-        if (batchStepOutputs[params.batchStepId]) return; // already handled
-        batchStepOutputs[params.batchStepId] = filename;
+
+        // Track completion count for this step
+        const stepCount = batchStepJobCounts[params.batchStepId];
+        if (stepCount) stepCount.completed++;
+
+        // Queue child jobs for every parent output (not just the first)
         const pending = batchPendingJobs[params.batchStepId] || [];
-        if (pending.length === 0) return;
-        delete batchPendingJobs[params.batchStepId];
-        try {
-          const res = await fetch(
-            `/api/image-b64/${encodeURIComponent(filename)}`,
-          );
-          const { data } = await res.json();
-          for (const pendingParams of pending) {
-            const chainedParams = {
-              ...pendingParams,
-              images: [{ name: "input1.png", data }],
-            };
-            for (let c = 0; c < (pendingParams.batchCount || 1); c++) {
-              jobQueue.push({ ...chainedParams });
+        if (pending.length > 0) {
+          try {
+            const res = await fetch(
+              `/api/image-b64/${encodeURIComponent(filename)}`,
+            );
+            const { data } = await res.json();
+            for (const pendingParams of pending) {
+              const count = pendingParams.batchCount || 1;
+              const chainedParams = {
+                ...pendingParams,
+                images: [{ name: "input1.png", data }],
+              };
+              for (let c = 0; c < count; c++) {
+                jobQueue.push({ ...chainedParams });
+              }
+              // Grow the running total and per-step count dynamically
+              batchTotalJobs += count;
+              batchStepJobCounts[pendingParams.batchStepId].total += count;
             }
+          } catch (err) {
+            console.warn("Failed to fetch chained image:", err);
           }
-        } catch (err) {
-          console.warn("Failed to fetch chained image:", err);
+          maybeFillSlots();
         }
-        maybeFillSlots();
+
+        // Only remove pending list once the parent step has fully completed
+        if (stepCount && stepCount.completed >= stepCount.total) {
+          delete batchPendingJobs[params.batchStepId];
+        }
+
         updateQueueDisplay();
       }
 
