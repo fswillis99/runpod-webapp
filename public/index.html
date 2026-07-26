@@ -2962,7 +2962,6 @@ text, watermark, blurry, ugly, deformed</textarea>
             batchCount: count,
           };
           if (step.chainFrom === "original") {
-            batchTotalJobs += count;
             batchStepJobCounts[step.id] = { total: count, completed: 0 };
             for (let c = 0; c < count; c++) {
               jobQueue.push({ ...stepParams });
