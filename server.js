@@ -458,6 +458,63 @@ app.delete("/api/trash", (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------------------------------------------------------------------------
+// Saved batches (persisted to batches.json)
+// ---------------------------------------------------------------------------
+const BATCHES_FILE = path.join(__dirname, "batches.json");
+
+function loadBatches() {
+  try {
+    return JSON.parse(fs.readFileSync(BATCHES_FILE, "utf8"));
+  } catch {
+    return [];
+  }
+}
+
+function saveBatches(batches) {
+  fs.writeFileSync(BATCHES_FILE, JSON.stringify(batches));
+}
+
+app.get("/api/batches", (req, res) => res.json(loadBatches()));
+
+app.post("/api/batches", (req, res) => {
+  const { id, name, steps } = req.body;
+  if (!name || !Array.isArray(steps)) {
+    return res.status(400).json({ error: "name and steps required" });
+  }
+  const batches = loadBatches();
+  const entryId = id || Date.now();
+  const existing = batches.findIndex((b) => b.id === entryId);
+  const entry = { id: entryId, name, steps };
+  if (existing !== -1) {
+    batches[existing] = entry;
+  } else {
+    batches.unshift(entry);
+  }
+  saveBatches(batches);
+  res.json(entry);
+});
+
+app.delete("/api/batches/:id", (req, res) => {
+  const id = Number(req.params.id);
+  const batches = loadBatches().filter((b) => b.id !== id);
+  saveBatches(batches);
+  res.json({ ok: true });
+});
+
+// Serve a locally-stored image as base64 (used for batch chaining)
+app.get("/api/image-b64/:filename", (req, res) => {
+  const { filename } = req.params;
+  if (filename.includes("..") || filename.includes("/")) {
+    return res.status(400).json({ error: "invalid filename" });
+  }
+  const filepath = path.join(IMAGES_DIR, filename);
+  if (!fs.existsSync(filepath)) {
+    return res.status(404).json({ error: "not found" });
+  }
+  res.json({ data: fs.readFileSync(filepath).toString("base64") });
+});
+
 app.get("/api/history", (req, res) => {
   res.json(loadHistory());
 });
