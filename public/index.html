@@ -4577,12 +4577,19 @@ text, watermark, blurry, ugly, deformed</textarea>
         const params = buildJobParams();
 
         if (isProcessing) {
-          pendingBatches.push({ type: "job", params });
-          updateQueueDisplay();
-          setStatus(
-            `Job queued (position ${pendingBatches.length})`,
-            "success",
-          );
+          if (turboMode && getAvailableSlotIdx() !== -1) {
+            // Turbo mode: a slot is free, fill it immediately
+            jobQueue.push(params);
+            maybeFillSlots();
+            updateQueueDisplay();
+          } else {
+            pendingBatches.push({ type: "job", params });
+            updateQueueDisplay();
+            setStatus(
+              `Job queued (position ${pendingBatches.length})`,
+              "success",
+            );
+          }
           return;
         }
 
