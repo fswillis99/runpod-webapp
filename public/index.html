@@ -2934,10 +2934,14 @@ text, watermark, blurry, ugly, deformed</textarea>
         // Auto-enable turbo for batch
         if (!turboMode) toggleTurbo();
 
-        // Reset batch tracking
+        // Reset batch tracking; compute expected total upfront so the
+        // progress bar denominator is stable from the moment we start.
         batchPendingJobs = {};
         batchStepJobCounts = {};
-        batchTotalJobs = 0;
+        batchTotalJobs = batchSteps.reduce(
+          (sum, _, idx) => sum + computeStepTotal(idx),
+          0,
+        );
         batchCompletedJobs = 0;
 
         const baseImages = uploadedImages
@@ -3012,8 +3016,7 @@ text, watermark, blurry, ugly, deformed</textarea>
               for (let c = 0; c < count; c++) {
                 jobQueue.push({ ...chainedParams });
               }
-              // Grow the running total and per-step count dynamically
-              batchTotalJobs += count;
+              // Track per-step total for internal step-completion detection
               batchStepJobCounts[pendingParams.batchStepId].total += count;
             }
           } catch (err) {
