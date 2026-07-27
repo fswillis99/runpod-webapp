@@ -4577,7 +4577,7 @@ text, watermark, blurry, ugly, deformed</textarea>
         const params = buildJobParams();
 
         if (isProcessing) {
-          if (turboMode && getAvailableSlotIdx() !== -1) {
+          if (turboMode) {
             // Turbo mode: a slot is free, fill it immediately
             jobQueue.push(params);
             maybeFillSlots();
