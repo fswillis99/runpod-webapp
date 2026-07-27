@@ -1027,6 +1027,15 @@
         border-color: #6366f1;
         background: rgba(99, 102, 241, 0.05);
       }
+      .drag-select-rect {
+        position: fixed;
+        border: 1px dashed #6366f1;
+        background: rgba(99, 102, 241, 0.07);
+        pointer-events: none;
+        z-index: 9999;
+        display: none;
+        border-radius: 3px;
+      }
       .history-cb-wrap {
         flex-shrink: 0;
         display: flex;
@@ -2641,6 +2650,22 @@ text, watermark, blurry, ugly, deformed</textarea>
         return selectedLibEntries.get(libId);
       }
       let uploadedImages = [null, null, null]; // each: {data: base64, name: string} | null
+
+      // Drag-to-select state (coordinates in document space, i.e. + scrollX/Y)
+      const _dragSel = {
+        active: false,
+        dragging: false,
+        startX: 0,
+        startY: 0,
+        curX: 0,
+        curY: 0,
+        section: null,
+        libId: null,
+        rafId: null,
+      };
+      const _dragSelEl = document.createElement("div");
+      _dragSelEl.className = "drag-select-rect";
+      document.body.appendChild(_dragSelEl);
 
       // Queue state
       let isProcessing = false;
@@ -5075,6 +5100,176 @@ text, watermark, blurry, ugly, deformed</textarea>
       // Show local timezone in the execution time stats header
       document.getElementById("statsTzHint").textContent =
         Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+      // ── Drag-to-select ─────────────────────────────────────────────────────────
+
+      const _SCROLL_ZONE = 80; // px from viewport edge that triggers auto-scroll
+      const _MAX_SCROLL_SPEED = 16; // px per animation frame at full speed
+
+      // Reposition the visual rect and apply selection to all cards.
+      // All coordinates are in document space; getBoundingClientRect() is
+      // converted to document space by adding the current scroll offset.
+      function _updateLiveSelection() {
+        const sx = window.scrollX;
+        const sy = window.scrollY;
+        const docLeft = Math.min(_dragSel.startX, _dragSel.curX);
+        const docRight = Math.max(_dragSel.startX, _dragSel.curX);
+        const docTop = Math.min(_dragSel.startY, _dragSel.curY);
+        const docBottom = Math.max(_dragSel.startY, _dragSel.curY);
+
+        // Update the fixed-position visual rectangle (viewport coords)
+        _dragSelEl.style.cssText = `display:block;left:${docLeft - sx}px;top:${docTop - sy}px;width:${docRight - docLeft}px;height:${docBottom - docTop}px;`;
+
+        function cardHit(card) {
+          const r = card.getBoundingClientRect();
+          return (
+            docLeft < r.right + sx &&
+            docRight > r.left + sx &&
+            docTop < r.bottom + sy &&
+            docBottom > r.top + sy
+          );
+        }
+
+        if (_dragSel.section === "history") {
+          document
+            .querySelectorAll(".history-card:not(.lib-card)")
+            .forEach((card) => {
+              const id = parseInt(card.dataset.id, 10);
+              if (isNaN(id)) return;
+              const hit = cardHit(card);
+              if (hit) selectedHistoryIds.add(id);
+              else selectedHistoryIds.delete(id);
+              card.classList.toggle("selected", hit);
+              const box = card.querySelector('input[type="checkbox"]');
+              if (box) box.checked = hit;
+            });
+          updateSelectionUI();
+        } else if (_dragSel.section === "library") {
+          const libId = _dragSel.libId;
+          const sel = getLibSel(libId);
+          document
+            .querySelectorAll(`.lib-card[data-lib="${libId}"]`)
+            .forEach((card) => {
+              const entryId = parseInt(card.dataset.id, 10);
+              if (isNaN(entryId)) return;
+              const hit = cardHit(card);
+              if (hit) sel.add(entryId);
+              else sel.delete(entryId);
+              card.classList.toggle("selected", hit);
+              const box = card.querySelector('input[type="checkbox"]');
+              if (box) box.checked = hit;
+            });
+          updateLibSelectionUI(libId);
+        }
+      }
+
+      // Auto-scroll loop: runs via requestAnimationFrame while the mouse is
+      // near the top or bottom viewport edge during a drag.
+      function _autoScrollTick() {
+        if (!_dragSel.dragging) return;
+        const viewportY = _dragSel.curY - window.scrollY;
+        let speed = 0;
+        if (viewportY < _SCROLL_ZONE) {
+          speed = -_MAX_SCROLL_SPEED * (1 - viewportY / _SCROLL_ZONE);
+        } else if (viewportY > window.innerHeight - _SCROLL_ZONE) {
+          speed =
+            _MAX_SCROLL_SPEED *
+            (1 - (window.innerHeight - viewportY) / _SCROLL_ZONE);
+        }
+        if (speed !== 0) {
+          window.scrollBy(0, speed);
+          _updateLiveSelection();
+          _dragSel.rafId = requestAnimationFrame(_autoScrollTick);
+        } else {
+          _dragSel.rafId = null;
+        }
+      }
+
+      document.addEventListener("mousedown", function (e) {
+        if (e.button !== 0) return;
+
+        const historySection = document.getElementById("section-history");
+        const libSection = e.target.closest(".library-section");
+        const inHistory = historySection && historySection.contains(e.target);
+
+        if (!inHistory && !libSection) return;
+
+        if (
+          e.target.closest(
+            "button, a, input, label, select, textarea, " +
+              ".history-actions, .history-cb-wrap, .history-thumb, .library-section-header",
+          )
+        )
+          return;
+
+        if (inHistory) {
+          _dragSel.section = "history";
+          _dragSel.libId = null;
+        } else {
+          const firstCard = libSection.querySelector(".lib-card[data-lib]");
+          if (!firstCard) return;
+          const libId = parseInt(firstCard.dataset.lib, 10);
+          if (isNaN(libId)) return;
+          _dragSel.section = "library";
+          _dragSel.libId = libId;
+        }
+
+        _dragSel.active = true;
+        _dragSel.dragging = false;
+        _dragSel.startX = e.clientX + window.scrollX;
+        _dragSel.startY = e.clientY + window.scrollY;
+        _dragSel.curX = _dragSel.startX;
+        _dragSel.curY = _dragSel.startY;
+        _dragSel.rafId = null;
+        e.preventDefault();
+      });
+
+      document.addEventListener("mousemove", function (e) {
+        if (!_dragSel.active) return;
+        _dragSel.curX = e.clientX + window.scrollX;
+        _dragSel.curY = e.clientY + window.scrollY;
+        const dx = _dragSel.curX - _dragSel.startX;
+        const dy = _dragSel.curY - _dragSel.startY;
+        if (!_dragSel.dragging && Math.sqrt(dx * dx + dy * dy) < 5) return;
+        _dragSel.dragging = true;
+        _updateLiveSelection();
+
+        // Start auto-scroll if near viewport edge; cancel if no longer near
+        const nearEdge =
+          e.clientY < _SCROLL_ZONE ||
+          e.clientY > window.innerHeight - _SCROLL_ZONE;
+        if (nearEdge && !_dragSel.rafId) {
+          _dragSel.rafId = requestAnimationFrame(_autoScrollTick);
+        } else if (!nearEdge && _dragSel.rafId) {
+          cancelAnimationFrame(_dragSel.rafId);
+          _dragSel.rafId = null;
+        }
+      });
+
+      document.addEventListener("mouseup", function (e) {
+        if (!_dragSel.active) return;
+        const wasDragging = _dragSel.dragging;
+        if (_dragSel.rafId) {
+          cancelAnimationFrame(_dragSel.rafId);
+          _dragSel.rafId = null;
+        }
+        _dragSel.active = false;
+        _dragSel.dragging = false;
+        _dragSelEl.style.display = "none";
+        if (wasDragging) {
+          // Selection is already up-to-date from live updates; just suppress
+          // the click event that follows mouseup to avoid opening the modal.
+          document.addEventListener(
+            "click",
+            function suppressClick(ce) {
+              ce.stopPropagation();
+              ce.preventDefault();
+              document.removeEventListener("click", suppressClick, true);
+            },
+            true,
+          );
+        }
+      });
     </script>
   </body>
 </html>
