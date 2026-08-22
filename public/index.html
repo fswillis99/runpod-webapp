@@ -5137,6 +5137,7 @@ text, watermark, blurry, ugly, deformed</textarea>
       refreshLibraries();
       refreshTrash();
       refreshCredits();
+      setInterval(refreshCredits, 5 * 60 * 1000);
       loadSavedBatches();
 
       // Show local timezone in the execution time stats header
