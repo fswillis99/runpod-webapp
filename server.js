@@ -130,6 +130,7 @@ async function fetchEstimatedBalance() {
   do {
     const params = new URLSearchParams({
       startTime: BALANCE_DATE,
+      endTime: new Date().toISOString(),
       scope: "all",
       limit: 100,
       bucketSize: "day",
@@ -139,7 +140,7 @@ async function fetchEstimatedBalance() {
       headers,
     });
     const data = await res.json();
-    for (const item of data.items ?? []) spent += item.totalAmount ?? 0;
+    for (const item of data.records ?? []) spent += item.totalAmount ?? 0;
     cursor = data.pagination?.nextCursor ?? null;
   } while (cursor);
   return parseFloat((STARTING_BALANCE - spent).toFixed(4));
@@ -335,13 +336,13 @@ app.post("/api/execution-times", async (req, res) => {
 // ---------------------------------------------------------------------------
 app.get("/api/v2-billing", async (req, res) => {
   const { bucketSize = "day", scope = "all" } = req.query;
-  if (!BALANCE_DATE) return res.json({ items: [] });
+  const lastN = bucketSize === "hour" ? 168 : 31;
   try {
     const items = [];
     let cursor;
     do {
       const params = new URLSearchParams({
-        startTime: BALANCE_DATE,
+        lastN,
         scope,
         bucketSize,
         limit: 100,
@@ -351,7 +352,7 @@ app.get("/api/v2-billing", async (req, res) => {
         headers,
       });
       const data = await r.json();
-      items.push(...(data.items ?? []));
+      items.push(...(data.records ?? []));
       cursor = data.pagination?.nextCursor ?? null;
     } while (cursor);
     res.json({ items });
