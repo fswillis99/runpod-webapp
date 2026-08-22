@@ -103,28 +103,62 @@ const API_KEY = process.env.RUNPOD_API_KEY;
 const ENDPOINT_ID = process.env.RUNPOD_ENDPOINT_ID;
 const MODEL_NAME = process.env.MODEL_NAME || "flux1-dev-fp8.safetensors";
 const BASE_URL = `https://api.runpod.ai/v2/${ENDPOINT_ID}`;
+const STARTING_BALANCE =
+  parseFloat(process.env.RUNPOD_STARTING_BALANCE) || null;
+const BALANCE_DATE = process.env.RUNPOD_BALANCE_DATE || null;
 
 const headers = {
   "Content-Type": "application/json",
   Authorization: `Bearer ${API_KEY}`,
 };
 
+async function fetchGraphQLBalance() {
+  const res = await fetch(`https://api.runpod.io/graphql?api_key=${API_KEY}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query: "{ myself { clientBalance } }" }),
+  });
+  const data = await res.json();
+  const raw = data.data?.myself?.clientBalance ?? null;
+  return raw !== null ? parseFloat(raw.toFixed(2)) : null;
+}
+
+async function fetchEstimatedBalance() {
+  if (!STARTING_BALANCE || !BALANCE_DATE) return null;
+  let spent = 0;
+  let cursor;
+  do {
+    const params = new URLSearchParams({
+      startTime: BALANCE_DATE,
+      endTime: new Date().toISOString(),
+      scope: "all",
+      limit: 100,
+      bucketSize: "day",
+    });
+    if (cursor) params.set("cursor", cursor);
+    const res = await fetch(`https://api.runpod.io/v2/billing?${params}`, {
+      headers,
+    });
+    const data = await res.json();
+    for (const item of data.records ?? []) spent += item.totalAmount ?? 0;
+    cursor = data.pagination?.nextCursor ?? null;
+  } while (cursor);
+  return parseFloat((STARTING_BALANCE - spent).toFixed(4));
+}
+
 // ---------------------------------------------------------------------------
 // Credits
 // ---------------------------------------------------------------------------
 app.get("/api/credits", async (req, res) => {
   try {
-    const response = await fetch(
-      `https://api.runpod.io/graphql?api_key=${API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: "{ myself { clientBalance } }" }),
-      },
-    );
-    const data = await response.json();
-    const balance = data.data?.myself?.clientBalance ?? null;
-    res.json({ credits: balance === null ? null : balance.toFixed(2) });
+    const [balance, estimated] = await Promise.all([
+      fetchGraphQLBalance(),
+      fetchEstimatedBalance(),
+    ]);
+    res.json({
+      credits: balance === null ? null : balance.toFixed(2),
+      estimated: estimated === null ? null : estimated.toFixed(2),
+    });
   } catch (err) {
     console.error("Credits API error:", err.message);
     res.status(500).json({ error: err.message });
@@ -272,18 +306,12 @@ app.post("/api/execution-times", async (req, res) => {
     return res.status(400).json({ error: "missing fields" });
 
   let balance = null;
+  let estimated_balance = null;
   try {
-    const bRes = await fetch(
-      `https://api.runpod.io/graphql?api_key=${API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: "{ myself { clientBalance } }" }),
-      },
-    );
-    const bData = await bRes.json();
-    const raw = bData.data?.myself?.clientBalance ?? null;
-    balance = raw !== null ? parseFloat(raw.toFixed(2)) : null;
+    [balance, estimated_balance] = await Promise.all([
+      fetchGraphQLBalance(),
+      fetchEstimatedBalance(),
+    ]);
   } catch (err) {
     console.warn("Balance fetch for exec time failed:", err.message);
   }
@@ -295,11 +323,43 @@ app.post("/api/execution-times", async (req, res) => {
     execution_time,
     workflow_type: workflow_type || null,
     balance,
+    estimated_balance,
   });
   const cutoff = new Date(Date.now() - EXEC_TIMES_RETENTION_MS).toISOString();
   const pruned = times.filter((t) => t.timestamp >= cutoff);
   saveExecTimes(pruned);
   res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// RunPod REST API v2 billing proxy
+// ---------------------------------------------------------------------------
+app.get("/api/v2-billing", async (req, res) => {
+  const { bucketSize = "day", scope = "all" } = req.query;
+  const lastN = bucketSize === "hour" ? 168 : 31;
+  try {
+    const items = [];
+    let cursor;
+    do {
+      const params = new URLSearchParams({
+        lastN,
+        scope,
+        bucketSize,
+        limit: 100,
+      });
+      if (cursor) params.set("cursor", cursor);
+      const r = await fetch(`https://api.runpod.io/v2/billing?${params}`, {
+        headers,
+      });
+      const data = await r.json();
+      items.push(...(data.records ?? []));
+      cursor = data.pagination?.nextCursor ?? null;
+    } while (cursor);
+    res.json({ items });
+  } catch (err) {
+    console.error("v2-billing proxy error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ---------------------------------------------------------------------------

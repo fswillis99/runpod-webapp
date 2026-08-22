@@ -4747,13 +4747,16 @@ text, watermark, blurry, ugly, deformed</textarea>
       async function refreshCredits() {
         const el = document.getElementById("creditsDisplay");
         try {
-          const res = await fetch("/api/credits");
-          const data = await res.json();
-          if (data.credits != null) {
-            el.innerHTML = `Credits: <span style="color:#4ade80;font-weight:600">$${data.credits}</span>`;
-          } else {
-            el.textContent = "Credits: —";
-          }
+          const data = await fetch("/api/credits").then((r) => r.json());
+          const live =
+            data.credits != null
+              ? `<span style="color:#4ade80;font-weight:600">$${data.credits}</span>`
+              : "—";
+          const est =
+            data.estimated != null
+              ? `<span style="color:#facc15;font-weight:600">$${data.estimated}</span>`
+              : "—";
+          el.innerHTML = `Credits: ${live} &nbsp;·&nbsp; Est&nbsp;(v2): ${est}`;
         } catch (err) {
           console.error("Credits fetch failed:", err);
           el.textContent = "Credits: —";
@@ -4821,27 +4824,62 @@ text, watermark, blurry, ugly, deformed</textarea>
       }
 
       async function renderExecStats() {
-        let entries;
+        let entries = [],
+          dayBillingItems = [],
+          hourBillingItems = [];
         try {
-          const res = await fetch("/api/execution-times");
-          entries = await res.json();
+          [entries, { items: dayBillingItems }, { items: hourBillingItems }] =
+            await Promise.all([
+              fetch("/api/execution-times").then((r) => r.json()),
+              fetch("/api/v2-billing?bucketSize=day&scope=serverless").then(
+                (r) => r.json(),
+              ),
+              fetch("/api/v2-billing?bucketSize=hour&scope=serverless").then(
+                (r) => r.json(),
+              ),
+            ]);
         } catch (err) {
-          console.warn("Exec times load failed:", err);
-          entries = [];
+          console.warn("Exec stats load failed:", err);
         }
 
+        function billingKey(utcString, granularity) {
+          const d = new Date(utcString);
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, "0");
+          const day = String(d.getDate()).padStart(2, "0");
+          if (granularity === "hour")
+            return `${y}-${m}-${day} ${String(d.getHours()).padStart(2, "0")}`;
+          return `${y}-${m}-${day}`;
+        }
+        const dayBillingMap = new Map(
+          dayBillingItems.map((item) => [
+            billingKey(item.startTime, "day"),
+            item.totalAmount,
+          ]),
+        );
+        const hourBillingMap = new Map(
+          hourBillingItems.map((item) => [
+            billingKey(item.startTime, "hour"),
+            item.totalAmount,
+          ]),
+        );
+
         // ── Most recent balance ──────────────────────────────────────────────────
-        const recentEntry = entries.find((e) => e.balance != null);
+        const recentEntry = entries.find(
+          (e) => (e.estimated_balance ?? e.balance) != null,
+        );
         const balanceRow = document.getElementById("statsBalanceRow");
         const balanceVal = document.getElementById("statsBalanceValue");
         if (recentEntry != null) {
-          balanceVal.textContent = `$${recentEntry.balance.toFixed(2)}`;
+          const val = recentEntry.estimated_balance ?? recentEntry.balance;
+          balanceVal.textContent = `$${val.toFixed(2)}`;
           balanceRow.style.display = "";
         } else {
           balanceRow.style.display = "none";
         }
 
         const fmtBal = (v) => (v != null ? `$${v.toFixed(2)}` : "—");
+        const fmtCost = (v) => (v != null ? `$${v.toFixed(4)}` : "—");
 
         // ── By Day ──────────────────────────────────────────────────────────────
         // Key by local calendar date so rows align with the user's clock.
@@ -4858,7 +4896,8 @@ text, watermark, blurry, ugly, deformed</textarea>
               label: dateGroupLabel(e.timestamp),
               totalMs: 0,
               count: 0,
-              balance: e.balance ?? null,
+              balance: e.estimated_balance ?? e.balance ?? null,
+              cost: dayBillingMap.get(key) ?? null,
             });
           }
           const b = dayMap.get(key);
@@ -4874,7 +4913,7 @@ text, watermark, blurry, ugly, deformed</textarea>
           dayEl.innerHTML = '<div class="stats-empty">No data yet.</div>';
         } else {
           dayEl.innerHTML = `<table class="stats-table">
-          <thead><tr><th>Date</th><th>Images</th><th>Total time</th><th>Balance</th></tr></thead>
+          <thead><tr><th>Date</th><th>Images</th><th>Total time</th><th>Balance</th><th>Cost (v2)</th></tr></thead>
           <tbody>${dayRows
             .map(
               ([, b]) => `
@@ -4883,6 +4922,7 @@ text, watermark, blurry, ugly, deformed</textarea>
               <td>${b.count}</td>
               <td>${fmtExecTime(b.totalMs)}</td>
               <td>${fmtBal(b.balance)}</td>
+              <td>${fmtCost(b.cost)}</td>
             </tr>`,
             )
             .join("")}
@@ -4911,7 +4951,8 @@ text, watermark, blurry, ugly, deformed</textarea>
               label,
               totalMs: 0,
               count: 0,
-              balance: e.balance ?? null,
+              balance: e.estimated_balance ?? e.balance ?? null,
+              cost: hourBillingMap.get(key) ?? null,
             });
           }
           const b = hourMap.get(key);
@@ -4927,7 +4968,7 @@ text, watermark, blurry, ugly, deformed</textarea>
           hourEl.innerHTML = '<div class="stats-empty">No data yet.</div>';
         } else {
           hourEl.innerHTML = `<table class="stats-table">
-          <thead><tr><th>Hour</th><th>Images</th><th>Total time</th><th>Balance</th></tr></thead>
+          <thead><tr><th>Hour</th><th>Images</th><th>Total time</th><th>Balance</th><th>Cost (v2)</th></tr></thead>
           <tbody>${hourRows
             .map(
               ([, b]) => `
@@ -4936,6 +4977,7 @@ text, watermark, blurry, ugly, deformed</textarea>
               <td>${b.count}</td>
               <td>${fmtExecTime(b.totalMs)}</td>
               <td>${fmtBal(b.balance)}</td>
+              <td>${fmtCost(b.cost)}</td>
             </tr>`,
             )
             .join("")}
@@ -5095,6 +5137,7 @@ text, watermark, blurry, ugly, deformed</textarea>
       refreshLibraries();
       refreshTrash();
       refreshCredits();
+      setInterval(refreshCredits, 5 * 60 * 1000);
       loadSavedBatches();
 
       // Show local timezone in the execution time stats header
