@@ -39,9 +39,24 @@ RUNPOD_API_KEY=your_api_key
 RUNPOD_ENDPOINT_ID=your_endpoint_id
 MODEL_NAME=flux1-dev-fp8.safetensors
 PORT=3000
+RUNPOD_STARTING_BALANCE=30.45
+RUNPOD_BALANCE_DATE=2026-08-22T02:25:07Z
 ```
 
 `MODEL_NAME` is used for Flux Dev workflow filenames only.
+
+#### Estimated balance (v2 billing)
+
+`RUNPOD_STARTING_BALANCE` and `RUNPOD_BALANCE_DATE` anchor the RunPod REST API v2 billing estimate. The app subtracts all spend recorded by RunPod since `RUNPOD_BALANCE_DATE` from `RUNPOD_STARTING_BALANCE` to show an estimated current balance alongside the live balance in the header.
+
+Whenever you top up your RunPod account:
+
+1. Note the live balance shown in the UI header (the green **Credits** figure).
+2. Update `RUNPOD_STARTING_BALANCE` to that value in `.env`.
+3. Update `RUNPOD_BALANCE_DATE` to the current UTC timestamp (e.g. `2026-08-22T10:00:00Z`).
+4. Restart the server.
+
+If either variable is absent, the estimated balance shows `—`.
 
 ### Running
 

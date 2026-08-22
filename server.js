@@ -103,28 +103,55 @@ const API_KEY = process.env.RUNPOD_API_KEY;
 const ENDPOINT_ID = process.env.RUNPOD_ENDPOINT_ID;
 const MODEL_NAME = process.env.MODEL_NAME || "flux1-dev-fp8.safetensors";
 const BASE_URL = `https://api.runpod.ai/v2/${ENDPOINT_ID}`;
+const STARTING_BALANCE =
+  parseFloat(process.env.RUNPOD_STARTING_BALANCE) || null;
+const BALANCE_DATE = process.env.RUNPOD_BALANCE_DATE || null;
 
 const headers = {
   "Content-Type": "application/json",
   Authorization: `Bearer ${API_KEY}`,
 };
 
+async function fetchEstimatedBalance() {
+  if (!STARTING_BALANCE || !BALANCE_DATE) return null;
+  let spent = 0;
+  let cursor;
+  do {
+    const params = new URLSearchParams({
+      startTime: BALANCE_DATE,
+      scope: "all",
+      limit: 100,
+      bucketSize: "day",
+    });
+    if (cursor) params.set("cursor", cursor);
+    const res = await fetch(`https://api.runpod.io/v2/billing?${params}`, {
+      headers,
+    });
+    const data = await res.json();
+    for (const item of data.items ?? []) spent += item.totalAmount ?? 0;
+    cursor = data.pagination?.nextCursor ?? null;
+  } while (cursor);
+  return parseFloat((STARTING_BALANCE - spent).toFixed(4));
+}
+
 // ---------------------------------------------------------------------------
 // Credits
 // ---------------------------------------------------------------------------
 app.get("/api/credits", async (req, res) => {
   try {
-    const response = await fetch(
-      `https://api.runpod.io/graphql?api_key=${API_KEY}`,
-      {
+    const [graphqlRes, estimated] = await Promise.all([
+      fetch(`https://api.runpod.io/graphql?api_key=${API_KEY}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: "{ myself { clientBalance } }" }),
-      },
-    );
-    const data = await response.json();
-    const balance = data.data?.myself?.clientBalance ?? null;
-    res.json({ credits: balance === null ? null : balance.toFixed(2) });
+      }).then((r) => r.json()),
+      fetchEstimatedBalance(),
+    ]);
+    const balance = graphqlRes.data?.myself?.clientBalance ?? null;
+    res.json({
+      credits: balance === null ? null : balance.toFixed(2),
+      estimated: estimated === null ? null : estimated.toFixed(2),
+    });
   } catch (err) {
     console.error("Credits API error:", err.message);
     res.status(500).json({ error: err.message });

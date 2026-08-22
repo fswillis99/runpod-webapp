@@ -4747,13 +4747,16 @@ text, watermark, blurry, ugly, deformed</textarea>
       async function refreshCredits() {
         const el = document.getElementById("creditsDisplay");
         try {
-          const res = await fetch("/api/credits");
-          const data = await res.json();
-          if (data.credits != null) {
-            el.innerHTML = `Credits: <span style="color:#4ade80;font-weight:600">$${data.credits}</span>`;
-          } else {
-            el.textContent = "Credits: —";
-          }
+          const data = await fetch("/api/credits").then((r) => r.json());
+          const live =
+            data.credits != null
+              ? `<span style="color:#4ade80;font-weight:600">$${data.credits}</span>`
+              : "—";
+          const est =
+            data.estimated != null
+              ? `<span style="color:#facc15;font-weight:600">$${data.estimated}</span>`
+              : "—";
+          el.innerHTML = `Credits: ${live} &nbsp;·&nbsp; Est&nbsp;(v2): ${est}`;
         } catch (err) {
           console.error("Credits fetch failed:", err);
           el.textContent = "Credits: —";
