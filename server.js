@@ -656,6 +656,20 @@ app.post("/api/libraries", (req, res) => {
   res.json({ id, name, slug });
 });
 
+// Move a library one slot up or down in the ordering.
+app.post("/api/libraries/:id/move", (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const dir = req.body.direction; // "up" | "down"
+  const libs = loadLibraries();
+  const i = libs.findIndex((l) => l.id === id);
+  if (i === -1) return res.status(404).json({ error: "library not found" });
+  const j = dir === "up" ? i - 1 : dir === "down" ? i + 1 : -1;
+  if (j < 0 || j >= libs.length) return res.json({ ok: true }); // no-op at edge
+  [libs[i], libs[j]] = [libs[j], libs[i]];
+  saveLibraries(libs);
+  res.json({ ok: true });
+});
+
 app.delete("/api/libraries/:id", (req, res) => {
   const id = parseInt(req.params.id, 10);
   const libs = loadLibraries();
