@@ -1465,6 +1465,28 @@
         opacity: 0.5;
         cursor: default;
       }
+      .lib-move-btn {
+        font-size: 0.72rem;
+        padding: 0.25rem 0.5rem;
+        border: 1px solid #333;
+        border-radius: 6px;
+        background: transparent;
+        color: #555;
+        cursor: pointer;
+        width: auto;
+        line-height: 1;
+        transition:
+          border-color 0.15s,
+          color 0.15s;
+      }
+      .lib-move-btn:hover:not(:disabled) {
+        border-color: #6366f1;
+        color: #6366f1;
+      }
+      .lib-move-btn:disabled {
+        opacity: 0.35;
+        cursor: default;
+      }
       .library-empty {
         color: #333;
         font-size: 0.85rem;
@@ -4049,9 +4071,11 @@ text, watermark, blurry, ugly, deformed</textarea>
           return;
         }
         container.innerHTML = libraries
-          .map((lib) => {
+          .map((lib, idx) => {
             const entries = lib.entries || [];
             const expanded = expandedLibraries.has(lib.id);
+            const isFirst = idx === 0;
+            const isLast = idx === libraries.length - 1;
             const imgBase = `/images/lib/${lib.slug || lib.id}/`;
             const sel = getLibSel(lib.id);
             const selCount = sel.size;
@@ -4075,6 +4099,8 @@ text, watermark, blurry, ugly, deformed</textarea>
                 </label>
                 <button class="lib-upload-btn" onclick="openLibUpload(${lib.id})">Upload</button>
                 <button class="lib-import-btn" onclick="importLibraryImages(${lib.id}, this)">Import</button>
+                <button class="lib-move-btn" onclick="moveLibrary(${lib.id}, 'up')" ${isFirst ? "disabled" : ""} title="Move up">▲</button>
+                <button class="lib-move-btn" onclick="moveLibrary(${lib.id}, 'down')" ${isLast ? "disabled" : ""} title="Move down">▼</button>
                 <button class="lib-delete-btn" onclick="deleteLibrary(${lib.id})">Delete</button>
               </div>
             </div>
@@ -4344,6 +4370,19 @@ text, watermark, blurry, ugly, deformed</textarea>
           await Promise.all([refreshLibraries(), refreshTrash()]);
         } catch (err) {
           console.warn("Library delete failed:", err);
+        }
+      }
+
+      async function moveLibrary(libId, direction) {
+        try {
+          await fetch(`/api/libraries/${libId}/move`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ direction }),
+          });
+          await refreshLibraries();
+        } catch (err) {
+          console.warn("Library move failed:", err);
         }
       }
 
